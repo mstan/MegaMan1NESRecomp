@@ -28,9 +28,12 @@ The donor image and its artwork are never written into the package. Charging,
 active-shot state/audio replay, slide movement/ceilings/contact and native
 damage paths have targeted checks. Multiplayer parity remains under development.
 
-The development `--coop on` controller slice separates personal movement,
-equipment state and native actors while the original frame loop advances the
-world once. Its movement and current-build replay checks pass. Multiplayer
+The development `--coop on` slice separates personal movement, equipment state
+and native actors while the original frame loop advances the world once.
+`--coop-p1 megaman|protoman` chooses the complementary character roster.
+Each character uses its own native parts, colors, slide and charged shots.
+Targeted checks cover movement, both native sprite priority orders and exact
+current-build charge/shot replay, including audio. Multiplayer
 combat, lifecycle, personal menus, independent views and online play are still
 being implemented; the Co-op package is not exposed in the Mods catalog yet.
 

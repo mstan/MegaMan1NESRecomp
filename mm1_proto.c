@@ -213,7 +213,7 @@ static int put(const uint8_t *in,int len) {
     if(!valid(in,len))return 0;
     memset(states,0,sizeof states);if(len)memcpy(states,in,sizeof states);return 1;
 }
-static int pose_done(uint16_t address){(void)address;if(!mm1_coop_drawing())mm1_proto_pose_done();return 0;}
+static int pose_done(uint16_t address){(void)address;mm1_proto_pose_done();return 0;}
 static void reset(void){set_enabled(0);real_mode=1;start_proto=1;}
 static void activate(void) {
     char value[32]="protoman";

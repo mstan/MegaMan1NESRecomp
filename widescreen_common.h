@@ -140,7 +140,6 @@ static int render(uint32_t *out,int width,int height,int x0,const uint32_t *nati
     /* Signed packets also repaint selected native pixels when byte-X sprites
      * have wrapped or the console's column guards interrupt the wide view. */
     mm1_video_paint_dust(out,width,x0,coverage);
-    mm1_coop_paint(out,width,x0,coverage);
     for(int i=ws.display.count-1;i>=0;i--) {
         WsSprite *s=&ws.display.tile[i];
         if(replaced&&mm1_video_replaces_actor(s->owner)) {

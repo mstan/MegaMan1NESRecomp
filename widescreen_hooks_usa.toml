@@ -222,3 +222,8 @@ bytes = "A9 00 85 3E A9 FE 20 77"
 id = "mm1.coop.death"
 addr = 0xC219
 bytes = "A9 FE 20 77 C4 A9 FF 20"
+
+[[mod_function_hook]]
+id = "mm1.coop.draw-part"
+addr = 0xD293
+bytes = "A4 0D E8 E8 E8 E8 E0 FC"

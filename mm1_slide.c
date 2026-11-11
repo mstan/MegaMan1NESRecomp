@@ -167,10 +167,14 @@ static void set_enabled(int on) {
 static void power_on(void *ctx){(void)ctx;memset(slides,0,sizeof slides);}
 static void frame_end(void *ctx) {
     (void)ctx;for(int i=0;i<2;i++)if(slides[i].dust&&++slides[i].dust_age>=26)slides[i].dust=0;
-    if(report)fprintf(report,"{\"frame\":%llu,\"active\":%u,\"timer\":%u,\"hurt\":%u,\"x\":%d,\"y\":%u,\"starts\":%llu,\"timed\":%llu,\"walls\":%llu,\"falls\":%llu,\"jumps\":%llu,\"reverse\":%llu,\"blocked\":%llu}\n",
-        (unsigned long long)cyc_ring_frame,S.active,S.timer,S.hurt,player_x(),R(0x600),
-        (unsigned long long)S.starts,(unsigned long long)S.timed,(unsigned long long)S.walls,
-        (unsigned long long)S.falls,(unsigned long long)S.jumps,(unsigned long long)S.reversals,(unsigned long long)S.blocked);
+    for(int seat=0;seat<(mm1_coop_available()?2:1);seat++) {
+        Slide *n=&slides[seat];
+        if(report)fprintf(report,"{\"frame\":%llu,\"seat\":%d,\"active\":%u,\"timer\":%u,\"hurt\":%u,\"x\":%d,\"y\":%u,\"starts\":%llu,\"timed\":%llu,\"walls\":%llu,\"falls\":%llu,\"jumps\":%llu,\"reverse\":%llu,\"blocked\":%llu}\n",
+            (unsigned long long)cyc_ring_frame,seat,n->active,n->timer,n->hurt,
+            mm1_coop_read(seat,0x460)*256+mm1_coop_read(seat,0x480),mm1_coop_read(seat,0x600),
+            (unsigned long long)n->starts,(unsigned long long)n->timed,(unsigned long long)n->walls,
+            (unsigned long long)n->falls,(unsigned long long)n->jumps,(unsigned long long)n->reversals,(unsigned long long)n->blocked);
+    }
 }
 static int get(uint8_t *out,int cap) {
     if(cap<(int)sizeof slides)return -1;

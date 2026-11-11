@@ -191,10 +191,14 @@ static void power_on(void *ctx){
 }
 static void frame_end(void *ctx) {
     (void)ctx;cyc_mm4_audio_frame_end();
-    for(int i=16;i<32;i++)if(R(0x600+i)==248||!(R(0x420+i)&128))C.full_hits&=~(1u<<i);
-    if(report)fprintf(report,"{\"frame\":%llu,\"counter\":%u,\"flash\":%u,\"hurt\":%u,\"half\":%llu,\"full\":%llu,\"passes\":%llu,\"kinds\":[%u,%u,%u]}\n",
-        (unsigned long long)cyc_ring_frame,C.counter,C.flashing,(R(0x420)&15)==3,(unsigned long long)C.half,
-        (unsigned long long)C.full,(unsigned long long)C.passes,C.shot[0].kind,C.shot[1].kind,C.shot[2].kind);
+    for(int seat=0;seat<(mm1_coop_available()?2:1);seat++) {
+        Charge *n=&charges[seat];
+        for(int i=16;i<32;i++)if(R(0x600+i)==248||!(R(0x420+i)&128))n->full_hits&=~(1u<<i);
+        if(report)fprintf(report,"{\"frame\":%llu,\"seat\":%d,\"counter\":%u,\"flash\":%u,\"hurt\":%u,\"half\":%llu,\"full\":%llu,\"passes\":%llu,\"kinds\":[%u,%u,%u]}\n",
+            (unsigned long long)cyc_ring_frame,seat,n->counter,n->flashing,(mm1_coop_read(seat,0x420)&15)==3,
+            (unsigned long long)n->half,(unsigned long long)n->full,(unsigned long long)n->passes,
+            n->shot[0].kind,n->shot[1].kind,n->shot[2].kind);
+    }
 }
 static void mix(void *ctx,int16_t *samples,size_t count){(void)ctx;cyc_mm4_audio_mix(samples,count);}
 static int get(uint8_t *out,int cap) {

@@ -37,7 +37,7 @@ static int field(int i,int slot){return(i<8?0x400+i*32:0x600+(i-8)*32)+slot;}
 static void sound(int id){int n=R(0x45);if(n<16){W(0x580+n,id);W(0x45,n+1);}}
 static int shield(uint16_t address) {
     (void)address;if(!enabled||!mm1_proto_guarding())return 0;
-    CycModRegs r;cyc_mod_regs(&r);int slot=r.x;
+    CycModRegs r={0};cyc_mod_regs(&r);int slot=r.x;
     if(slot<16||slot>=32||R(0x600+slot)>=248||!(R(0x420+slot)&2))return 0;
     int type=R(0x6E0+slot);if(type!=0x1A&&type!=0x2D)return 0;
     int dx=(R(0x460+slot)*256+R(0x480+slot))-(R(0x460)*256+R(0x480));
@@ -62,7 +62,7 @@ static uint16_t hit_flags(void) {
     uint16_t bits=0;for(int i=16;i<32;i++)if(R(0x420+i)&128)bits|=(uint16_t)(1u<<(i-16));return bits;
 }
 static int native_pass(uint16_t address) {
-    (void)address;CycModRegs r;cyc_mod_regs(&r);
+    (void)address;CycModRegs r={0};cyc_mod_regs(&r);
     if(S.active) {
         /* Only our exact native RTS continuation may finish this scope. */
         unsigned ret=R(0x100|(uint8_t)(r.s+1))|(R(0x100|(uint8_t)(r.s+2))<<8);
@@ -100,7 +100,7 @@ static int native_pass(uint16_t address) {
     r.s=(uint8_t)stack;cyc_mod_set_regs(&r);S.passes++;return 1;
 }
 static int buster_damage(uint16_t address) {
-    (void)address;CycModRegs r;cyc_mod_regs(&r);int slot=R(0x2F);
+    (void)address;CycModRegs r={0};cyc_mod_regs(&r);int slot=R(0x2F);
     if(slot<16||slot>=32||!(S.buster_hits&(1u<<slot)))return 0;
     /* A normal native hit is consumed later by this actor's AI. Substitute
      * only that hit's damage-table index; the player's selection stays real. */

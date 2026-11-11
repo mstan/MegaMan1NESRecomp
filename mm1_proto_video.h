@@ -19,3 +19,8 @@ void mm1_video_paint_dust(uint32_t *out,int width,int x0,const uint8_t *coverage
 int mm1_video_state_get(uint8_t *out,int cap);
 int mm1_video_state_valid(const uint8_t *in,int len);
 int mm1_video_state_set(const uint8_t *in,int len);
+void mm1_video_private_finish(void);
+void mm1_video_private_latch(int seat);
+int mm1_video_private_place(uint32_t *out,int width,int x0,const uint8_t *coverage,int slot);
+void mm1_video_private_dust(uint32_t *out,int width,int x0,const uint8_t *coverage);
+void mm1_video_private_after(uint32_t *out,int width,int x0,const uint8_t *coverage);

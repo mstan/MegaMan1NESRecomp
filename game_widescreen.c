@@ -59,7 +59,9 @@ static void game_prepare_render(int width,int x0) {
 static void game_draw_native(uint32_t *out,int width,int x0) {
     const uint8_t *oam=cyc_render_oam();
     int first=-1;for(int i=0;i<64;i++)if(mm1_proto_owns_slot(i)){first=i;break;}
+    int pending=mm1_coop_picture(),insert=mm1_coop_insert_slot();
     for(int i=63;i>=0;i--) {
+        if(pending&&i<=insert){mm1_coop_paint(out,width,x0,coverage);pending=0;}
         if(mm1_proto_owns_slot(i)) {
             mm1_video_paint_slot(out,width,x0,coverage,i);
             continue;
@@ -68,8 +70,9 @@ static void game_draw_native(uint32_t *out,int width,int x0) {
         int kind=ws.display_oam_kind[i],x=o[3],force=0;
         if(kind==1){x=ws.display_oam_x[i]-camera_x;force=x!=o[3];}
         if(kind==2){x=ws.display_oam_x[i]-x0;force=1;}
-        draw_tile(out,width,x0,x0+x,o[0]+1,o[1],o[2],force||first>=0||mm1_video_dust_visible());
+        draw_tile(out,width,x0,x0+x,o[0]+1,o[1],o[2],force||first>=0||mm1_video_dust_visible()||mm1_coop_picture());
     }
+    if(pending)mm1_coop_paint(out,width,x0,coverage);
 }
 static void game_dma(void) {
     /* Native HUD tiles are screen-space, never world-space actors. */
@@ -188,14 +191,20 @@ static void load_visible(void) {
     }
 }
 static int hook(uint16_t addr) {
-    if(mm1_coop_drawing())return 0;
+    if(mm1_coop_drawing()) {
+        if(addr==MM_BUILD)mm1_proto_draw_begin();
+        if(addr==MM_DRAW)mm1_proto_pose_begin();
+        if(addr==MM_EMIT){CycModRegs r={0};cyc_mod_regs(&r);mm1_proto_part_emitted(r.x/4+1);}
+        return 0;
+    }
     if(addr==MM_DMA0){mm1_proto_draw_latch();mm1_coop_video_latch();if(enabled)dma_packet();return 0;}
     if(addr==MM_BUILD){
+        mm1_coop_primary_begin();
         mm1_slide_restore_input();
         mm1_proto_draw_begin();
         ws.build.count=0;memset(ws.build_oam_kind,0,sizeof ws.build_oam_kind);draw_pending=0;return 0;
     }
-    if(addr==MM_DRAW){if(enabled&&game_valid())capture_actor();mm1_proto_pose_begin();return 0;}
+    if(addr==MM_DRAW){mm1_coop_primary_body();if(enabled&&game_valid())capture_actor();mm1_proto_pose_begin();return 0;}
     if(addr==MM_EMIT){
         if(enabled&&game_valid())capture_native_tile();
         CycModRegs regs;cyc_mod_regs(&regs);mm1_proto_part_emitted(regs.x/4+1);return 0;

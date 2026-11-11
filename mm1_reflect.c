@@ -111,6 +111,7 @@ static int buster_damage(uint16_t address) {
     r.a=0;cyc_mod_set_regs(&r);S.buster_hits&=~(1u<<slot);return 0;
 }
 static int exit_scope(uint16_t address) {
+    if(address==0xC219&&mm1_coop_personal_death())return 0;
     if(S.active&&address==0xCA2D)S.boss_kills++;
     mm1_reflect_stage_enter();return 0;
 }

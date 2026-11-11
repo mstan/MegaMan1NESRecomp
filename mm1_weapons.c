@@ -95,7 +95,7 @@ int mm1_weapons_player_dispatch(void) {
 }
 static int dispatch(uint16_t address) {
     (void)address;mm1_coop_frame_begin();state.ready=1;state.stage=R(0x31);
-    mm1_coop_dispatch();
+    if(mm1_coop_dispatch())return 1;
     if(mm1_proto_dispatch()){mm1_charge_cancel();return 0;}
     mm1_charge_dispatch();return mm1_weapons_player_dispatch();
 }

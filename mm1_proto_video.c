@@ -112,9 +112,11 @@ void mm1_proto_pose_done(void) {
     restore_invulnerability();
 }
 void mm1_proto_draw_latch(void) {
-    restore_invulnerability();video.shown=video.building;
-    memcpy(video.shown_shot,video.building_shot,sizeof video.shown_shot);
-    video.shown_dust=video.building_dust;
+    restore_invulnerability();
+    if(mm1_coop_primary_publish()) {
+        video.shown=video.building;memcpy(video.shown_shot,video.building_shot,sizeof video.shown_shot);
+        video.shown_dust=video.building_dust;
+    }
     for(int k=0;k<256;k++)video.page[k]=R(0x200+k);
     /* The retail inventory writes its four face sprites directly. Keep its
      * exact 16x16 grid, X scroll correction and surrounding life digits. */

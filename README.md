@@ -36,9 +36,15 @@ Targeted checks cover movement, native enemy/boss damage and defeat, personal
 health/weapon refills and shared extra lives. Both sprite priority orders also
 work while the main character blinks. Current-build charge/shot and native NMI
 continuations replay exactly, including audio, with Fit margins retained.
-Full multiplayer lifecycle, personal menus, independent views and online play
-are still being implemented; the Co-op package is not exposed in the Mods
-catalog yet.
+Both characters appear during native arrival. A personal death plays its native
+particles while the survivor keeps control, equipment and charge. When both die,
+the original death script takes one shared life and restarts both players with
+their own weapon energy. Either controller can continue from native Game Over.
+Death handoffs retain the displayed character and its weapon colors through
+lagged frames and current-build save/load.
+Withdrawal/rejoin, checkpoint revival, personal menus, independent views and
+online play are still being implemented; the Co-op package is not exposed in
+the Mods catalog yet.
 
 ## Cycle backend migration branch
 

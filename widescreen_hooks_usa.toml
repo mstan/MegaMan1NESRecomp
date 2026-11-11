@@ -272,3 +272,20 @@ id = "mm1.coop.refill"
 addr = 0x915E
 bank = 5
 bytes = "A5 AD F0 03 20 53 94 A5"
+
+[[mod_function_hook]]
+id = "mm1.coop.pre-shoot"
+addr = 0x91A7
+bank = 5
+bytes = "20 5C A3 20 8C DB A5 55"
+
+[[mod_function_hook]]
+id = "mm1.coop.game-over"
+addr = 0x9038
+bank = 5
+bytes = "A5 31 85 AC A9 0A 85 31"
+
+[[mod_function_hook]]
+id = "mm1.coop.checkpoint"
+addr = 0xC26B
+bytes = "A6 31 DD D4 C2 90 35 A0"

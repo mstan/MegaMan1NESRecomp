@@ -197,9 +197,10 @@ static int hook(uint16_t addr) {
         if(addr==MM_EMIT){CycModRegs r={0};cyc_mod_regs(&r);mm1_proto_part_emitted(r.x/4+1);}
         return 0;
     }
-    if(addr==MM_DMA0){int previous=mm1_coop_present_begin();mm1_proto_draw_latch();mm1_coop_video_latch();
+    if(addr==MM_DMA0){int previous=mm1_coop_dma_begin();mm1_proto_draw_latch();mm1_coop_video_latch();
         mm1_coop_present_end(previous);if(enabled)dma_packet();return 0;}
     if(addr==MM_BUILD){
+        mm1_coop_intro_draw();
         mm1_coop_draw_begin();
         mm1_coop_primary_begin();
         mm1_slide_restore_input();

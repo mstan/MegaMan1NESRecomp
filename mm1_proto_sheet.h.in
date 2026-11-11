@@ -1,0 +1,3 @@
+#pragma once
+static const unsigned char MM1_PROTO_PNG[]={@MM1_PROTO_PNG_BYTES@};
+static const unsigned char MM1_PROTO_JUMP_PNG[]={@MM1_PROTO_JUMP_PNG_BYTES@};

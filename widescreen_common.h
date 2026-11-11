@@ -1,4 +1,4 @@
-/* Cycle-host support shared by the two independent widescreen experiments. */
+/* Regional stage compositor and current-page sprite capture. */
 #pragma once
 #include "cyc_host_extras.h"
 #include "cyc_mod.h"
@@ -11,6 +11,8 @@
 #include "mod_runtime.h"
 #include "mod_function_hooks.h"
 #include "mod_savestate.h"
+#include "mm1_proto.h"
+#include "mm1_proto_video.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,11 +21,11 @@
 #define R(a) cyc_mod_peek((uint16_t)(a))
 #define W(a,v) cyc_mod_poke((uint16_t)(a),(uint8_t)(v))
 #define WS_TILES 512
-typedef struct { int16_t x,y; uint8_t tile,attr; } WsSprite;
+typedef struct { int16_t x,y; uint8_t tile,attr,owner,pad; } WsSprite;
 typedef struct { int count; WsSprite tile[WS_TILES]; } WsPacket;
 typedef struct {
     WsPacket build, display; uint8_t activated[256]; uint32_t activation_scene;
-    /* Append to the original saved layout so earlier experiment states load. */
+    /* Signed placements travel with the same DMA page as the packets. */
     int16_t build_oam_x[64],display_oam_x[64];
     uint8_t build_oam_kind[64],display_oam_kind[64];
 } WsPresentation;
@@ -61,6 +63,7 @@ static void append_sprite(int x,int y,int tile,int attr) {
     if(ws.build.count>=WS_TILES){sprite_overflow++;return;}
     WsSprite *v=&ws.build.tile[ws.build.count++];
     v->x=(int16_t)x;v->y=(int16_t)y;v->tile=(uint8_t)tile;v->attr=(uint8_t)attr;
+    v->owner=R(0x0C);v->pad=0;
 }
 static void dma_packet(void) {
     game_dma();ws.display=ws.build;ws.build.count=0;
@@ -92,7 +95,14 @@ static void draw_tile(uint32_t *out,int width,int x0,int sx,int sy,int tile,int 
 
 static int render(uint32_t *out,int width,int height,int x0,const uint32_t *native,void *user) {
     (void)user;(void)height;
-    if(!enabled || !game_present_valid() || !(cyc_render_line_mask(80)&8))return 0;
+    static uint32_t character[256*240];
+    int replaced=mm1_proto_native_picture(character);
+    if(replaced)native=character;
+    if(!enabled || !game_present_valid() || !(cyc_render_line_mask(80)&8)) {
+        if(!replaced)return 0;
+        for(int y=0;y<240;y++)memcpy(out+y*width+x0,native+y*256,256*sizeof *out);
+        return 1;
+    }
     camera_x=unwrap(cyc_render_line_scroll_x(80),game_camera(),WS_SCROLL_PERIOD);
     game_prepare_render(width,x0);
     memset(coverage,0,(size_t)width*240);
@@ -128,6 +138,7 @@ static int render(uint32_t *out,int width,int height,int x0,const uint32_t *nati
      * have wrapped or the console's column guards interrupt the wide view. */
     for(int i=ws.display.count-1;i>=0;i--) {
         WsSprite *s=&ws.display.tile[i];
+        if(replaced&&!s->owner)continue;
         int sx=s->x-camera_x+x0,sy=s->y;
         draw_tile(out,width,x0,sx,sy,s->tile,s->attr,0);
     }
@@ -152,10 +163,17 @@ static void verify_map(void) {
 }
 static void enable(int on) {
     enabled=on;
-    for(size_t i=0;i<sizeof(hook_ids)/sizeof(hook_ids[0]);i++)nes_mod_set_function_hook_enabled(hook_ids[i],on);
+    mm1_video_character_changed();
     cyc_video_set_mode(on?aspect:NES_VIDEO_STOCK);
-    cyc_render_set_compositor(on?render:NULL,NULL);
     if(!on)memset(&ws,0,sizeof ws);
+}
+void mm1_video_character_changed(void) {
+    int character=mm1_proto_available();
+    for(size_t i=0;i<sizeof(hook_ids)/sizeof(hook_ids[0]);i++)
+        nes_mod_set_function_hook_enabled(hook_ids[i],enabled||(character&&(i==0||i==1||i==2||i==6)));
+    cyc_render_capture_background(character!=0);
+    cyc_render_set_stock_compositing(character!=0);
+    cyc_render_set_compositor(enabled||character?render:NULL,NULL);
 }
 static void reset_mod(void) {enable(0);}
 static void activate(void) {

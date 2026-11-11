@@ -4,6 +4,7 @@
 #include "cyc_mod.h"
 #include "cyc_ring.h"
 #include "cyc_tcp.h"
+#include "mm1_proto.h"
 #include "logical_input.h"
 #include "mod_runtime.h"
 #include "mod_function_hooks.h"
@@ -26,6 +27,14 @@ static int safe(void) {
     return state.ready && state.stage==R(0x31) && R(0x31)<10 && R(0x54)==32 && R(0x600)<248 && R(0x6A) &&
         !(R(0x420)&15) && !R(0x1E) && !R(0x26) && !R(0x41) && !R(0x95) && !state.menu;
 }
+int mm1_controls_safe(void){return safe();}
+void mm1_controls_refresh(void) {
+    int on=enabled||mm1_proto_available();
+    nes_mod_set_function_hook_enabled("mm1.weapons.dispatch",on);
+    nes_mod_set_function_hook_enabled("mm1.weapons.menu-enter",on);
+    nes_mod_set_function_hook_enabled("mm1.weapons.menu-leave",on);
+    nes_mod_set_function_hook_enabled("mm1.weapons.stage",on);
+}
 static void set_enabled(int on) {
 #ifdef MM1_PROFILE_USA
     enabled=on!=0;
@@ -33,10 +42,7 @@ static void set_enabled(int on) {
     (void)on;enabled=0;
 #endif
     state.pending=state.previous=0;
-    nes_mod_set_function_hook_enabled("mm1.weapons.dispatch",enabled);
-    nes_mod_set_function_hook_enabled("mm1.weapons.menu-enter",enabled);
-    nes_mod_set_function_hook_enabled("mm1.weapons.menu-leave",enabled);
-    nes_mod_set_function_hook_enabled("mm1.weapons.stage",enabled);
+    mm1_controls_refresh();
 }
 static int owned_sprite(int weapon,int sprite,int slot) {
     switch(weapon) {
@@ -57,6 +63,7 @@ static int dispatch(uint16_t address) {
      * image. Only reaching the actual gameplay loop admits a control edge. */
     state.ready=1;state.stage=R(0x31);
     unsigned fresh=state.pending;state.pending=0;
+    if(mm1_proto_dispatch())return 0;
     if(fresh){attempt_frame=cyc_ring_frame;attempt_edge=R(0x18);attempt_owned=R(0x5D);attempt_reason=0;}
     if(!enabled || (fresh!=CYC_GAME_L && fresh!=CYC_GAME_R) || !safe() || (R(0x18)&12)) {
         if(fresh)attempt_reason=!enabled?1:(fresh!=1&&fresh!=2)?2:!safe()?3:4;
@@ -83,7 +90,7 @@ static void input(void *ctx,uint8_t buttons[2]) {
     unsigned held=nes_input_game_buttons(1)&(CYC_GAME_L|CYC_GAME_R);
     unsigned fresh=held&~state.previous;
     if(fresh)fresh_inputs++;
-    if(!enabled || !safe() || held==(CYC_GAME_L|CYC_GAME_R))state.pending=0;
+    if(!enabled || !safe() || mm1_proto_teleporting() || held==(CYC_GAME_L|CYC_GAME_R))state.pending=0;
     else state.pending|=(uint8_t)fresh; /* Native input polling can span a lag frame. */
     state.previous=(uint8_t)held;
 }
@@ -127,7 +134,7 @@ static void tcp_state(int id,const char *line) {
 static void tcp_setup(void *ctx){(void)ctx;cyc_tcp_register("mm1_weapons","quick weapon selection state",tcp_state);}
 static int menu_enter(uint16_t address){(void)address;state.menu=1;state.pending=0;return 0;}
 static int menu_leave(uint16_t address){(void)address;state.menu=0;state.pending=0;return 0;}
-static int stage_enter(uint16_t address){(void)address;state.ready=0;state.pending=0;return 0;}
+static int stage_enter(uint16_t address){(void)address;state.ready=0;state.pending=0;mm1_proto_stage_enter();return 0;}
 const CycHostExtras *mm1_weapons_extras(void) {
     static const CycInputProfile profile={.id="megaman-weapons-1",
         .game_label={"Previous weapon (L)","Next weapon (R)"},.game_pad={"leftshoulder","rightshoulder"},

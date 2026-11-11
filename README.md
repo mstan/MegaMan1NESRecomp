@@ -9,7 +9,15 @@ The [widescreen implementation](WIDESCREEN.md) remains experimental. USA checks
 cover Cut Man terrain, wider enemy activation, native/interpreter agreement and
 current-build state replay. Margin combat, other stages and scripted transitions
 still need qualification. The Europe prototype retains its separate hooks and
-opt-in default. Proto Man and multiplayer parity are under development.
+opt-in default.
+
+The optional USA Proto Man package adds Select teleport swapping, an airborne
+front shield with reflected native projectiles, two uncharged shots and double
+incoming damage. Its normal-stat reskin option retains Mega Man's behavior.
+Current checks cover native/interpreter agreement, Fit sprite placement,
+current-build state replay and native enemy/boss collision paths. Charge,
+sliding, character-specific inventory art and multiplayer parity remain under
+development.
 
 ## Cycle backend migration branch
 

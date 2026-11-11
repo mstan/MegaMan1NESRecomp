@@ -1,0 +1,50 @@
+format_version = 1
+id = "mega-man-usa.character.protoman"
+version = "1.0.0"
+name = "Proto Man"
+author = "NESRecomp; sprite sheet: Mister Man"
+description = "Play as Proto Man and use Select to teleport between both characters. Original artwork by Capcom; ripped/edited sprite sheet by Mister Man, credited in assets/CREDITS.txt. Slide and charged Buster remain shared optional enhancements."
+license = "PolyForm-Noncommercial-1.0.0 (code); artwork credited in assets/CREDITS.txt"
+resolver = "declarative"
+save_compatibility = "requires-same-mods"
+
+[[target]]
+game_id = "mega-man-usa"
+rom_crc32 = "6ee4bb0a"
+
+[[feature]]
+id = "protoman"
+name = "Proto Man"
+description = "An airborne front shield, two uncharged shots and double incoming damage. A normal-stat reskin is also available."
+group = "Gameplay"
+default_enabled = false
+
+[[plugin]]
+feature = "protoman"
+id = "mm1.protoman"
+
+[[option]]
+feature = "protoman"
+id = "start"
+label = "Starting character"
+type = "choice"
+default = "protoman"
+[[option.choice]]
+value = "megaman"
+label = "Mega Man"
+[[option.choice]]
+value = "protoman"
+label = "Proto Man"
+
+[[option]]
+feature = "protoman"
+id = "mode"
+label = "Character behavior"
+type = "choice"
+default = "protoman"
+[[option.choice]]
+value = "protoman"
+label = "Proto Man mode"
+[[option.choice]]
+value = "megaman"
+label = "Mega Man behavior (reskin)"

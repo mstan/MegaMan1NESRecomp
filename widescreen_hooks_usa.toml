@@ -53,3 +53,59 @@ bytes = "A5 AC C9 0A F0 0E A5 31"
 id = "mm1.weapons.stage"
 addr = 0x9081
 bytes = "18 A5 AB 65 31 48 AA BD"
+
+[[mod_function_hook]]
+id = "mm1.proto.player"
+addr = 0x94A8
+bank = 5
+bytes = "A2 00 86 2F AD 20 04 29"
+
+[[mod_function_hook]]
+id = "mm1.proto.damage"
+addr = 0xA23D
+bank = 5
+bytes = "85 0D 38 A5 6A E5 0C 85"
+
+[[mod_function_hook]]
+id = "mm1.proto.shots"
+addr = 0xA747
+bank = 5
+bytes = "A2 02 BD 00 06 C9 F8 F0"
+
+[[mod_function_hook]]
+id = "mm1.proto.pose-done"
+addr = 0xD2A3
+bytes = "86 0D 60 68 68 4C B3 C3"
+
+[[mod_function_hook]]
+id = "mm1.proto.shield"
+addr = 0xA1CA
+bank = 5
+bytes = "20 BE C9 B0 07 E8 E8 E4"
+
+[[mod_function_hook]]
+id = "mm1.proto.reflected-pass"
+addr = 0x98EA
+bank = 5
+bytes = "A9 00 85 9A A2 02 86 2F"
+
+[[mod_function_hook]]
+id = "mm1.proto.reflected-damage"
+addr = 0xBECA
+bank = 5
+bytes = "0A A8 B9 44 BF 85 04 B9"
+
+[[mod_function_hook]]
+id = "mm1.proto.boss-killed"
+addr = 0xCA2D
+bytes = "A9 20 20 16 D1 A9 01 85"
+
+[[mod_function_hook]]
+id = "mm1.proto.player-killed"
+addr = 0xC219
+bytes = "A9 FE 20 77 C4 A9 FF 20"
+
+[[mod_function_hook]]
+id = "mm1.proto.stage-clear"
+addr = 0xC05A
+bytes = "A9 00 85 3E A9 FE 20 77"

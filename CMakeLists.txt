@@ -16,6 +16,14 @@ if(NESRECOMP_BACKEND STREQUAL "cycle")
         message(FATAL_ERROR "Supply Mega Man (USA).nes or set NESRECOMP_ROM explicitly; EU qualification requires an explicit ROM path")
     endif()
     find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
+    set(_proto_assets "${CMAKE_CURRENT_SOURCE_DIR}/mods/preloaded/packages/mega-man-usa.character.protoman/1.0.0/assets")
+    file(READ "${_proto_assets}/protoman.png" MM1_PROTO_PNG_BYTES HEX)
+    string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1,\n" MM1_PROTO_PNG_BYTES "${MM1_PROTO_PNG_BYTES}")
+    file(READ "${_proto_assets}/jump-open.png" MM1_PROTO_JUMP_PNG_BYTES HEX)
+    string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1,\n" MM1_PROTO_JUMP_PNG_BYTES "${MM1_PROTO_JUMP_PNG_BYTES}")
+    configure_file(mm1_proto_sheet.h.in "${CMAKE_CURRENT_BINARY_DIR}/mm1_proto_sheet.h" @ONLY)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${_proto_assets}/protoman.png" "${_proto_assets}/jump-open.png")
     execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/rom_profile.py" "${NESRECOMP_ROM}"
         RESULT_VARIABLE profile_result OUTPUT_VARIABLE profile OUTPUT_STRIP_TRAILING_WHITESPACE)
     if(NOT profile_result EQUAL 0)
@@ -51,7 +59,10 @@ if(NESRECOMP_BACKEND STREQUAL "cycle")
             "${MEGAMAN_HOOKS}")
         list(APPEND MEGAMAN_WIDESCREEN_ARGS
             MODS HOST_EXTRAS "${CMAKE_CURRENT_SOURCE_DIR}/game_widescreen.c"
-            "${CMAKE_CURRENT_SOURCE_DIR}/mm1_host.c" "${CMAKE_CURRENT_SOURCE_DIR}/mm1_weapons.c")
+            "${CMAKE_CURRENT_SOURCE_DIR}/mm1_host.c" "${CMAKE_CURRENT_SOURCE_DIR}/mm1_weapons.c"
+            "${CMAKE_CURRENT_SOURCE_DIR}/mm1_proto.c" "${CMAKE_CURRENT_SOURCE_DIR}/mm1_proto_video.c"
+            "${CMAKE_CURRENT_SOURCE_DIR}/mm1_reflect.c"
+            "${NESRECOMP_ROOT}/runner/cyc/cyc_protoman_atlas.c")
     nesrecomp_add_cycle_game(MegaManRecomp
         ROM "${NESRECOMP_ROM}" GAME_CONFIG "${MEGAMAN_GAME_CONFIG}"
         RECOMPILER "${NESRECOMP_HOST_COMPILER}" SEED_FILE "${MEGAMAN_CYCLE_SEEDS}"
@@ -60,7 +71,8 @@ if(NESRECOMP_BACKEND STREQUAL "cycle")
     if(megaman_variant STREQUAL "usa")
         target_compile_definitions(MegaManRecomp PRIVATE MM1_PROFILE_USA=1)
     endif()
-    target_include_directories(MegaManRecomp PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_include_directories(MegaManRecomp PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+        "${CMAKE_CURRENT_BINARY_DIR}" "${NESRECOMP_ROOT}/runner/src")
     add_custom_command(TARGET MegaManRecomp POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${CMAKE_CURRENT_SOURCE_DIR}/mods/preloaded"

@@ -5889,3 +5889,18 @@
 4k:1E:EB93 39
 4k:1E:EB96 39
 4k:1E:EB97 39
+
+# Observed with Electric Beam selected during native reflected-shot collision
+# and boss defeat. The original weapon handler remains native too.
+4k:16:A2DA 518
+4k:16:A2DC 518
+4k:16:A2DE 518
+4k:16:A2E0 518
+4k:16:A2E2 3626
+4k:16:A2E4 3626
+4k:16:A2E7 3626
+4k:16:A30C 3626
+4k:16:A30E 3626
+4k:16:A30F 3626
+4k:16:A311 3626
+4k:16:A313 518

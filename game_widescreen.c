@@ -58,12 +58,17 @@ static void game_prepare_render(int width,int x0) {
 }
 static void game_draw_native(uint32_t *out,int width,int x0) {
     const uint8_t *oam=cyc_render_oam();
+    int first=-1;for(int i=0;i<64;i++)if(mm1_proto_owns_slot(i)){first=i;break;}
     for(int i=63;i>=0;i--) {
+        if(mm1_proto_owns_slot(i)) {
+            if(i==first)mm1_proto_paint(out,width,x0,coverage);
+            continue;
+        }
         const uint8_t *o=oam+i*4;if(o[0]>=239)continue;
         int kind=ws.display_oam_kind[i],x=o[3],force=0;
         if(kind==1){x=ws.display_oam_x[i]-camera_x;force=x!=o[3];}
         if(kind==2){x=ws.display_oam_x[i]-x0;force=1;}
-        draw_tile(out,width,x0,x0+x,o[0]+1,o[1],o[2],force);
+        draw_tile(out,width,x0,x0+x,o[0]+1,o[1],o[2],force||first>=0);
     }
 }
 static void game_dma(void) {
@@ -170,12 +175,18 @@ static void load_visible(void) {
     }
 }
 static int hook(uint16_t addr) {
+    if(addr==MM_DMA0){mm1_proto_draw_latch();if(enabled)dma_packet();return 0;}
+    if(addr==MM_BUILD){
+        mm1_proto_draw_begin();
+        ws.build.count=0;memset(ws.build_oam_kind,0,sizeof ws.build_oam_kind);draw_pending=0;return 0;
+    }
+    if(addr==MM_DRAW){if(enabled&&game_valid())capture_actor();mm1_proto_pose_begin();return 0;}
+    if(addr==MM_EMIT){
+        if(enabled&&game_valid())capture_native_tile();
+        CycModRegs regs;cyc_mod_regs(&regs);mm1_proto_part_emitted(regs.x/4+1);return 0;
+    }
     if(!enabled)return 0;
-    if(addr==MM_DMA0){dma_packet();return 0;}
-    if(addr==MM_BUILD){ws.build.count=0;memset(ws.build_oam_kind,0,sizeof ws.build_oam_kind);draw_pending=0;return 0;}
     if(!game_valid())return 0;
-    if(addr==MM_DRAW){capture_actor();return 0;}
-    if(addr==MM_EMIT){capture_native_tile();return 0;}
     if(!extended || cyc_video_width()<=256)return 0;
     if(addr==MM_SPAWN){load_visible();return 0;}
     if(addr==0x9951 || addr==0xBE81) {

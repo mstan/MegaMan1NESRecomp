@@ -3,7 +3,7 @@
 python tests/widescreen/validate.py --rom <original ROM> [--exe <cycle build>]
 Native processes are hidden on Windows. Evidence stays in wide-evidence/regression.
 """
-import argparse,json,pathlib,shutil,struct,subprocess
+import argparse,json,os,pathlib,shutil,struct,subprocess,zlib
 
 REPO=pathlib.Path(__file__).resolve().parents[2]
 TARGET='MegaManRecomp.exe'
@@ -15,6 +15,8 @@ def main():
  p.add_argument('--exe',type=pathlib.Path,default=REPO/'build-wide/Release'/TARGET)
  p.add_argument('--out',type=pathlib.Path,default=REPO/'wide-evidence/regression')
  a=p.parse_args();a.rom=a.rom.resolve();a.exe=a.exe.resolve();a.out.mkdir(parents=True,exist_ok=True)
+ usa=zlib.crc32(a.rom.read_bytes()[16:])==0x6EE4BB0A
+ package='mega-man-usa.enhancement.widescreen' if usa else PACKAGE
  route=pathlib.Path(__file__).with_name('route.txt');options={}
  if hasattr(subprocess,'STARTUPINFO'):
   info=subprocess.STARTUPINFO();info.dwFlags|=subprocess.STARTF_USESHOWWINDOW;info.wShowWindow=0
@@ -25,7 +27,8 @@ def main():
         '--widescreen-report',str(a.out/(label+'.jsonl')),'--no-save',
         '--config',str(a.out/(label+'.ini')),*map(str,extra)]
   with (a.out/(label+'.log')).open('w') as log:
-   result=subprocess.run(args,cwd=a.exe.parent,stdout=log,stderr=subprocess.STDOUT,**options)
+   result=subprocess.run(args,cwd=a.exe.parent,stdout=log,stderr=subprocess.STDOUT,
+       env=dict(os.environ,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy',NESRECOMP_NO_LAUNCHER='1'),**options)
   assert result.returncode==0,(label,(a.out/(label+'.log')).read_text())
   rows=[json.loads(s) for s in (a.out/(label+'.jsonl')).read_text().splitlines()]
   assert all(r['failures']==0 and r['overflow']==0 for r in rows),(label,rows)
@@ -40,15 +43,17 @@ def main():
  assert viewport[-1]['spawns']>0,viewport
  catalog=a.out/'mods';shutil.copytree(REPO/'mods/preloaded',catalog,dirs_exist_ok=True)
  (catalog/'state.toml').write_text('')
- run('default',['--mods-root',catalog])
- assert (a.out/'default.hash').read_bytes()==(a.out/'stock.hash').read_bytes()
- (catalog/'state.toml').write_text(f'[[feature]]\npackage_id = "{PACKAGE}"\nid = "widescreen"\nenabled = true\n'
+ run('default',['--mods-root',catalog,'--present-size','1280x720'])
+ default_width=struct.unpack('>I',(a.out/'default-wide.png').read_bytes()[16:20])[0]
+ if usa:assert default_width==426,default_width
+ else:assert (a.out/'default.hash').read_bytes()==(a.out/'stock.hash').read_bytes()
+ (catalog/'state.toml').write_text(f'[[feature]]\npackage_id = "{package}"\nid = "widescreen"\nenabled = true\n'
                                  '[feature.values]\naspect = "21-9"\nenemy_activation = "classic"\n')
  run('package',['--mods-root',catalog])
  assert (a.out/'package.hash').read_bytes()==(a.out/'stock.hash').read_bytes()
  width=struct.unpack('>I',(a.out/'package-wide.png').read_bytes()[16:20])[0]
  assert width==560,width
- summary=dict(stock_equals_interpreter=True,classic_equals_stock=True,default_off=True,
+ summary=dict(stock_equals_interpreter=True,classic_equals_stock=True,default_fit=usa,default_width=default_width,
               package_activation_width=width,viewport_spawns=viewport[-1]['spawns'],
               native_terrain_checks=[dict(frame=r['frame'],samples=r['terrain_samples'],errors=r['terrain_errors']) for r in viewport if r['terrain_samples']])
  (a.out/'summary.json').write_text(json.dumps(summary,indent=2))

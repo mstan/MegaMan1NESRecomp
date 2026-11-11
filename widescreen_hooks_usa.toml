@@ -1,0 +1,55 @@
+[[mod_function_hook]]
+id = "mm1.widescreen.draw"
+addr = 0xD16E
+bytes = "A6 0C BD 00 06 C9 F8 D0"
+
+[[mod_function_hook]]
+id = "mm1.widescreen.build"
+addr = 0xD131
+bytes = "A9 06 85 42 8D 06 C0 A0"
+
+[[mod_function_hook]]
+id = "mm1.widescreen.cull"
+addr = 0x9951
+bytes = "F0 05 A9 01 4C 96 99 BD"
+
+[[mod_function_hook]]
+id = "mm1.widescreen.minor_cull"
+addr = 0xBE81
+bytes = "F0 03 4C B1 BE BD A0 06"
+
+[[mod_function_hook]]
+id = "mm1.widescreen.spawn"
+addr = 0xD8A2
+bytes = "A5 8F F0 03 20 02 DB A5"
+
+[[mod_function_hook]]
+id = "mm1.widescreen.dma0"
+addr = 0xD4C1
+bytes = "8D 14 40 20 73 D6 A5 37"
+
+[[mod_function_hook]]
+id = "mm1.widescreen.emit"
+addr = 0xD293
+bytes = "A4 0D E8 E8 E8 E8 E0 FC"
+
+[[mod_function_hook]]
+id = "mm1.weapons.dispatch"
+addr = 0x9165
+bank = 5
+bytes = "A5 18 29 0C F0 1C 29 04"
+
+[[mod_function_hook]]
+id = "mm1.weapons.menu-enter"
+addr = 0xC3BF
+bytes = "A9 06 85 42 8D 06 C0 A5"
+
+[[mod_function_hook]]
+id = "mm1.weapons.menu-leave"
+addr = 0xC3E3
+bytes = "A5 AC C9 0A F0 0E A5 31"
+
+[[mod_function_hook]]
+id = "mm1.weapons.stage"
+addr = 0x9081
+bytes = "18 A5 AB 65 31 48 AA BD"

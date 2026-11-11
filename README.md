@@ -1,8 +1,15 @@
 # MegaMan1NESRecomp
 
-The Europe ROM has an opt-in [experimental adaptive widescreen mod](WIDESCREEN.md).
-It is disabled by default and has known margin-combat and scene-transition limits.
-The normal USA build does not enroll the Europe-specific hooks.
+The USA ROM supports adaptive Fit to screen and L/R weapon switching through
+the preloaded Mods catalog. Fit is enabled for a fresh profile. L/R follows the
+native inventory order, including empty weapons, and ignores unsafe transitions.
+Existing saved choices take precedence over the package defaults.
+
+The [widescreen implementation](WIDESCREEN.md) remains experimental. USA checks
+cover Cut Man terrain, wider enemy activation, native/interpreter agreement and
+current-build state replay. Margin combat, other stages and scripted transitions
+still need qualification. The Europe prototype retains its separate hooks and
+opt-in default. Proto Man and multiplayer parity are under development.
 
 ## Cycle backend migration branch
 

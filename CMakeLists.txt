@@ -36,30 +36,29 @@ if(NESRECOMP_BACKEND STREQUAL "cycle")
     include("${NESRECOMP_ROOT}/runner/cyc/project.cmake")
     set(MEGAMAN_GAME_CONFIG "${CMAKE_CURRENT_SOURCE_DIR}/game.toml")
     set(MEGAMAN_WIDESCREEN_ARGS)
-    # These byte-verified hooks describe the Europe payload (94476A70).
-    # Keep the normal USA build free of unsupported hooks and host additions.
-    if(megaman_variant STREQUAL "europe")
+    # Each regional cartridge has its own verified instruction boundaries.
+    if(megaman_variant STREQUAL "usa")
+        set(MEGAMAN_HOOKS "${CMAKE_CURRENT_SOURCE_DIR}/widescreen_hooks_usa.toml")
+    else()
+        set(MEGAMAN_HOOKS "${CMAKE_CURRENT_SOURCE_DIR}/widescreen_hooks.toml")
+    endif()
         file(READ "${CMAKE_CURRENT_SOURCE_DIR}/game.toml" megaman_game)
-        file(READ "${CMAKE_CURRENT_SOURCE_DIR}/widescreen_hooks.toml" megaman_wide_hooks)
+        file(READ "${MEGAMAN_HOOKS}" megaman_wide_hooks)
         set(MEGAMAN_GAME_CONFIG "${CMAKE_CURRENT_BINARY_DIR}/game-widescreen.toml")
         file(WRITE "${MEGAMAN_GAME_CONFIG}" "${megaman_game}\n${megaman_wide_hooks}")
         set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
             "${CMAKE_CURRENT_SOURCE_DIR}/game.toml"
-            "${CMAKE_CURRENT_SOURCE_DIR}/widescreen_hooks.toml")
+            "${MEGAMAN_HOOKS}")
         list(APPEND MEGAMAN_WIDESCREEN_ARGS
-            MODS HOST_EXTRAS "${CMAKE_CURRENT_SOURCE_DIR}/game_widescreen.c")
-    endif()
+            MODS HOST_EXTRAS "${CMAKE_CURRENT_SOURCE_DIR}/game_widescreen.c"
+            "${CMAKE_CURRENT_SOURCE_DIR}/mm1_host.c" "${CMAKE_CURRENT_SOURCE_DIR}/mm1_weapons.c")
     nesrecomp_add_cycle_game(MegaManRecomp
         ROM "${NESRECOMP_ROM}" GAME_CONFIG "${MEGAMAN_GAME_CONFIG}"
         RECOMPILER "${NESRECOMP_HOST_COMPILER}" SEED_FILE "${MEGAMAN_CYCLE_SEEDS}"
         GAME_ID "mega-man-${megaman_variant}" PLAYERS 1 REGION "${megaman_region}"
         BOXART "${CMAKE_CURRENT_SOURCE_DIR}/boxart.tga" ${MEGAMAN_WIDESCREEN_ARGS})
-    if(megaman_variant STREQUAL "europe")
-        target_include_directories(MegaManRecomp PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-        add_custom_command(TARGET MegaManRecomp POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_CURRENT_SOURCE_DIR}/mods/preloaded"
-                "$<TARGET_FILE_DIR:MegaManRecomp>/mods")
+    if(megaman_variant STREQUAL "usa")
+        target_compile_definitions(MegaManRecomp PRIVATE MM1_PROFILE_USA=1)
     endif()
     target_include_directories(MegaManRecomp PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
     add_custom_command(TARGET MegaManRecomp POST_BUILD

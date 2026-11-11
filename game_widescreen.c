@@ -2,10 +2,9 @@
 #include "widescreen_symbols.h"
 #define WS_PLAYFIELD_HEIGHT 240
 #define WS_SCROLL_PERIOD 512
-#define WS_PACKAGE "mega-man.enhancement.widescreen"
 #define WS_PLUGIN "mm1.widescreen"
 static const char *hook_ids[]={"mm1.widescreen.draw","mm1.widescreen.emit","mm1.widescreen.build","mm1.widescreen.cull","mm1.widescreen.minor_cull","mm1.widescreen.spawn","mm1.widescreen.dma0"};
-static const uint16_t hook_addrs[]={0xD174,0xD299,0xD137,0x9951,0xBE81,0xD8A8,MM_DMA0};
+static const uint16_t hook_addrs[]={MM_DRAW,MM_EMIT,MM_BUILD,0x9951,0xBE81,MM_SPAWN,MM_DMA0};
 #include "widescreen_common.h"
 
 static uint8_t level[0x4000],graphics[0x4000];
@@ -122,7 +121,7 @@ static void capture_actor(void) {
     if(!cyc_mod_isolate_begin())return;
     W(0x1A,virtual_camera);W(0x1B,virtual_camera>>8);W(0x0D,0);
     for(int i=0;i<64;i++)W(0x200+i*4,248);
-    int ok=cyc_mod_call(0xD174,&regs);
+    int ok=cyc_mod_call(MM_DRAW,&regs);
     if(ok)for(int i=1;i<64;i++) {
         int a=0x200+i*4,y=R(a);
         if(y<239)append_sprite(virtual_camera+R(a+3),y+1,R(a+1),R(a+2));
@@ -159,7 +158,7 @@ static void load_visible(void) {
     for(int k=0;k<count && ok;k++) {
         int i=indices[k];uint8_t *v=&graphics[ptr-0x8000+i*4];
         W(0,v[1]);W(1,v[2]);W(5,v[0]);regs.x=(uint8_t)i;regs.y=4;regs.a=v[3];
-        ok=cyc_mod_call(0xD9B3,&regs);
+        ok=cyc_mod_call(MM_SPAWN_OBJECT,&regs);
     }
     memcpy(after,cyc_cpu_ram(),sizeof after);cyc_mod_isolate_end();
     if(!ok){failures++;return;}
@@ -173,12 +172,12 @@ static void load_visible(void) {
 static int hook(uint16_t addr) {
     if(!enabled)return 0;
     if(addr==MM_DMA0){dma_packet();return 0;}
-    if(addr==0xD137){ws.build.count=0;memset(ws.build_oam_kind,0,sizeof ws.build_oam_kind);draw_pending=0;return 0;}
+    if(addr==MM_BUILD){ws.build.count=0;memset(ws.build_oam_kind,0,sizeof ws.build_oam_kind);draw_pending=0;return 0;}
     if(!game_valid())return 0;
-    if(addr==0xD174){capture_actor();return 0;}
-    if(addr==0xD299){capture_native_tile();return 0;}
+    if(addr==MM_DRAW){capture_actor();return 0;}
+    if(addr==MM_EMIT){capture_native_tile();return 0;}
     if(!extended || cyc_video_width()<=256)return 0;
-    if(addr==0xD8A8){load_visible();return 0;}
+    if(addr==MM_SPAWN){load_visible();return 0;}
     if(addr==0x9951 || addr==0xBE81) {
         CycModRegs regs;cyc_mod_regs(&regs);
         int cam=game_camera(),margin=(cyc_video_width()-256)/2,x=actor_x(regs.x);

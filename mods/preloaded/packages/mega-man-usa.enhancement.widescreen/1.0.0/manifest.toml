@@ -1,0 +1,57 @@
+format_version = 1
+id = "mega-man-usa.enhancement.widescreen"
+version = "1.0.0"
+name = "Mega Man Adaptive Widescreen"
+author = "NESRecomp"
+description = "Adaptive stage terrain and wider enemy activation."
+license = "PolyForm-Noncommercial-1.0.0"
+resolver = "declarative"
+save_compatibility = "custom"
+
+[[target]]
+game_id = "mega-man-usa"
+rom_crc32 = "6ee4bb0a"
+
+[[feature]]
+id = "widescreen"
+name = "Adaptive Widescreen"
+description = "Reveal stage terrain and actors at the sides. Fit follows the available window."
+group = "Display"
+exclusive_group = "display-mode"
+default_enabled = true
+
+[[plugin]]
+feature = "widescreen"
+id = "mm1.widescreen"
+
+[[option]]
+feature = "widescreen"
+id = "aspect"
+label = "Aspect"
+type = "choice"
+default = "fit"
+[[option.choice]]
+value = "fit"
+label = "Fit to screen (adaptive)"
+[[option.choice]]
+value = "16-9"
+label = "16:9"
+[[option.choice]]
+value = "21-9"
+label = "21:9"
+[[option.choice]]
+value = "32-9"
+label = "32:9"
+
+[[option]]
+feature = "widescreen"
+id = "enemy_activation"
+label = "Enemy activation"
+type = "choice"
+default = "viewport"
+[[option.choice]]
+value = "viewport"
+label = "Throughout the visible stage"
+[[option.choice]]
+value = "classic"
+label = "Original activation and culling"

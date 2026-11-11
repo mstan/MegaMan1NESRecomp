@@ -277,7 +277,7 @@ static const CycHostOption options[]={
     {"--widescreen-enemies",true,"viewport|classic"},
     {"--widescreen-report",true,"FILE: periodic test diagnostics"}
 };
-const CycHostExtras *cyc_host_extras(void) {
+const CycHostExtras *mm1_widescreen_extras(void) {
     static const CycHostExtras x={.power_on=power_on,.frame_end=frame_end,.options=options,.option_count=3,.option=option,.tcp_setup=tcp_setup};return &x;
 }
 NES_MOD_CONSTRUCTOR(register_widescreen) {

@@ -1,0 +1,24 @@
+format_version = 1
+id = "mega-man-usa.enhancement.quick-weapons"
+version = "1.0.0"
+name = "Mega Man Quick Weapon Switching"
+author = "NESRecomp"
+description = "Use L/R to cycle acquired weapons in inventory order."
+license = "PolyForm-Noncommercial-1.0.0"
+resolver = "declarative"
+save_compatibility = "custom"
+
+[[target]]
+game_id = "mega-man-usa"
+rom_crc32 = "6ee4bb0a"
+
+[[feature]]
+id = "quick-weapons"
+name = "Quick weapon switching"
+description = "L/R selects acquired weapons without opening the inventory."
+group = "Gameplay"
+default_enabled = true
+
+[[plugin]]
+feature = "quick-weapons"
+id = "mm1.weapons"

@@ -13,6 +13,7 @@
 #include "mod_savestate.h"
 #include "mm1_proto.h"
 #include "mm1_proto_video.h"
+#include "mm1_charge.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -138,7 +139,13 @@ static int render(uint32_t *out,int width,int height,int x0,const uint32_t *nati
      * have wrapped or the console's column guards interrupt the wide view. */
     for(int i=ws.display.count-1;i>=0;i--) {
         WsSprite *s=&ws.display.tile[i];
-        if(replaced&&!s->owner)continue;
+        if(replaced&&mm1_video_replaces_actor(s->owner)) {
+            if(s->owner&& !mm1_video_actor_has_oam(s->owner)) {
+                int first=1;for(int j=0;j<i;j++)if(ws.display.tile[j].owner==s->owner){first=0;break;}
+                if(first)mm1_video_paint_actor(out,width,x0,coverage,s->owner);
+            }
+            continue;
+        }
         int sx=s->x-camera_x+x0,sy=s->y;
         draw_tile(out,width,x0,sx,sy,s->tile,s->attr,0);
     }
@@ -168,12 +175,13 @@ static void enable(int on) {
     if(!on)memset(&ws,0,sizeof ws);
 }
 void mm1_video_character_changed(void) {
-    int character=mm1_proto_available();
+    int character=mm1_proto_available()||mm1_charge_available();
     for(size_t i=0;i<sizeof(hook_ids)/sizeof(hook_ids[0]);i++)
         nes_mod_set_function_hook_enabled(hook_ids[i],enabled||(character&&(i==0||i==1||i==2||i==6)));
     cyc_render_capture_background(character!=0);
     cyc_render_set_stock_compositing(character!=0);
     cyc_render_set_compositor(enabled||character?render:NULL,NULL);
+    nes_mod_set_function_hook_enabled("mm1.proto.pose-done",character);
 }
 static void reset_mod(void) {enable(0);}
 static void activate(void) {

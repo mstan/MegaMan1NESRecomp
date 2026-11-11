@@ -61,7 +61,7 @@ static void game_draw_native(uint32_t *out,int width,int x0) {
     int first=-1;for(int i=0;i<64;i++)if(mm1_proto_owns_slot(i)){first=i;break;}
     for(int i=63;i>=0;i--) {
         if(mm1_proto_owns_slot(i)) {
-            if(i==first)mm1_proto_paint(out,width,x0,coverage);
+            mm1_video_paint_slot(out,width,x0,coverage,i);
             continue;
         }
         const uint8_t *o=oam+i*4;if(o[0]>=239)continue;

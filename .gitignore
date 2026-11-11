@@ -22,3 +22,4 @@ build-wide/
 build-wide-fix/
 wide-evidence/
 Play Widescreen.lnk
+__pycache__/

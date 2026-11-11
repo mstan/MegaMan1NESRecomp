@@ -15,8 +15,14 @@ The optional USA Proto Man package adds Select teleport swapping, an airborne
 front shield with reflected native projectiles, two uncharged shots and double
 incoming damage. Its normal-stat reskin option retains Mega Man's behavior.
 Current checks cover native/interpreter agreement, Fit sprite placement,
-current-build state replay and native enemy/boss collision paths. Charge,
-sliding, character-specific inventory art and multiplayer parity remain under
+current-build state replay and native enemy/boss collision paths.
+
+The optional charged Buster reads graphics, timing and sounds from your Mega
+Man 4 (USA) ROM at launch. Both characters can charge; half shots use normal
+Buster damage, full shots triple it and continue through lethal enemy hits.
+The donor image and its artwork are never written into the package. Charging,
+active-shot state/audio replay and native damage paths have targeted checks.
+Sliding, character-specific inventory art and multiplayer parity remain under
 development.
 
 ## Cycle backend migration branch

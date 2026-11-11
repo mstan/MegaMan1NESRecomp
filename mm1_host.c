@@ -4,7 +4,8 @@
 const CycHostExtras *mm1_widescreen_extras(void);
 const CycHostExtras *mm1_weapons_extras(void);
 const CycHostExtras *mm1_proto_extras(void);
-enum {PARTS=3};
+const CycHostExtras *mm1_charge_extras(void);
+enum {PARTS=4};
 static const CycHostExtras *parts[PARTS];
 static CycHostExtras host;
 static CycHostOption options[16];
@@ -30,6 +31,10 @@ static void tcp_setup(void *ctx) {
     (void)ctx;
     for(int i=0;i<PARTS;i++)if(parts[i]->tcp_setup)parts[i]->tcp_setup(parts[i]->ctx);
 }
+static void audio_mix(void *ctx,int16_t *samples,size_t count) {
+    (void)ctx;
+    for(int i=0;i<PARTS;i++)if(parts[i]->audio_mix)parts[i]->audio_mix(parts[i]->ctx,samples,count);
+}
 static bool option(void *ctx,const char *name,const char *value) {
     (void)ctx;
     for(int i=0;i<PARTS;i++)for(size_t k=0;k<parts[i]->option_count;k++)
@@ -40,8 +45,10 @@ const CycHostExtras *cyc_host_extras(void) {
     if(!initialized) {
         initialized=1;parts[0]=mm1_widescreen_extras();parts[1]=mm1_weapons_extras();
         parts[2]=mm1_proto_extras();
+        parts[3]=mm1_charge_extras();
         host.power_on=power_on;host.frame_end=frame_end;host.input=input;
         host.frame_begin=frame_begin;
+        host.audio_mix=audio_mix;host.audio_rate=48000;
         host.option=option;host.tcp_setup=tcp_setup;host.options=options;
         host.input_profile=parts[1]->input_profile;
         for(int i=0;i<PARTS;i++)for(size_t k=0;k<parts[i]->option_count;k++)

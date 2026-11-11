@@ -1,0 +1,35 @@
+format_version = 1
+id = "mega-man-usa.backport.mm4"
+version = "1.0.0"
+name = "Mega Man 4 Abilities"
+author = "NESRecomp"
+description = "Optional abilities read from your Mega Man 4 (USA) ROM at launch. The donor image is never bundled or written to disk."
+license = "PolyForm-Noncommercial-1.0.0"
+resolver = "declarative"
+save_compatibility = "requires-same-mods"
+
+[[target]]
+game_id = "mega-man-usa"
+rom_crc32 = "6ee4bb0a"
+
+[[feature]]
+id = "charge"
+name = "Charged Mega Buster"
+description = "Hold B with the Buster for half and full charge shots, palette flashes and Mega Man 4's sound effects. Both characters share the ability."
+group = "Gameplay"
+default_enabled = false
+
+[[plugin]]
+feature = "charge"
+id = "mm1.backport.charge"
+
+[[external_rom]]
+feature = "charge"
+id = "mm4-usa"
+label = "Mega Man 4 ROM"
+description = "Select your Mega Man 4 (USA) image. Its verified data is read at launch."
+format = "nes"
+identity = "Mega Man 4 (USA)"
+size = 524288
+shared = true
+normalized_sha1 = "673a888c468abe33fb0b3f063c6837dd21d5d32b"

@@ -2,6 +2,7 @@
 #include "mm1_proto_video.h"
 #include "mm1_proto.h"
 #include "mm1_reflect.h"
+#include "mm1_charge.h"
 #include "cyc_mod.h"
 #include "cyc_render.h"
 #include "mod_runtime.h"
@@ -14,12 +15,18 @@
 typedef struct {
     uint64_t mask;
     int16_t x,y;
-    uint8_t pose,right,behind,weapon,replace,proto,teleport,pad;
+    uint8_t pose,right,behind,weapon,replace,proto,teleport,flash;
     uint8_t oam[256];
 } BodyFrame;
-typedef struct {BodyFrame building,shown;uint8_t restoring,invulnerability;} Presentation;
+typedef struct {uint64_t mask;int16_t x,y;uint8_t sprite,right,replace,pad;uint8_t oam[256];} ShotFrame;
+typedef struct {
+    BodyFrame building,shown;ShotFrame building_shot[3],shown_shot[3];uint8_t page[256];
+    uint8_t restoring,invulnerability;
+} Presentation;
 static Presentation video;
 static int valid_picture(void);
+static int valid_shot(int actor);
+int mm1_controls_menu(void);
 void mm1_proto_video_reset(void){memset(&video,0,sizeof video);}
 void mm1_proto_video_debug(char *out,int cap) {
     BodyFrame *f=&video.shown;
@@ -32,8 +39,16 @@ static void restore_invulnerability(void) {
 }
 void mm1_proto_draw_begin(void) {
     restore_invulnerability();memset(&video.building,0,sizeof video.building);
+    memset(video.building_shot,0,sizeof video.building_shot);
 }
 void mm1_proto_pose_begin(void) {
+    int actor=R(0x0C);
+    if(mm1_charge_available()&&actor>=2&&actor<=4) {
+        ShotFrame *f=&video.building_shot[actor-2];int sprite=mm1_charge_sprite(actor);
+        f->replace=(uint8_t)(sprite>=0);f->sprite=(uint8_t)(sprite<0?0:sprite);
+        f->x=(int16_t)((R(0x460+actor)*256+R(0x480+actor))-(R(0x1B)*256+R(0x1A)));
+        f->y=(int16_t)(R(0x600+actor)+1);f->right=(uint8_t)((R(0x420+actor)&64)!=0);return;
+    }
     if(!mm1_proto_available()||R(0x0C)||R(0x31)>=10||R(0x54)!=32)return;
     int pose=mm1_proto_pose_id();BodyFrame *f=&video.building;
     f->replace=(uint8_t)((mm1_proto_selected()||mm1_proto_teleporting())&&pose>=0);
@@ -47,16 +62,30 @@ void mm1_proto_pose_begin(void) {
     f->y=(int16_t)(R(0x600)+1+mm1_proto_beam_offset());
     f->right=(uint8_t)mm1_proto_right();f->weapon=(uint8_t)mm1_weapon_identity();
     f->proto=(uint8_t)mm1_proto_selected();f->teleport=(uint8_t)mm1_proto_teleporting();
+    f->flash=(uint8_t)mm1_charge_flashing();
     /* The simulation keeps its native damage guard. Only this drawing call
      * gets visible parts so the transition has an actual OAM ownership record. */
     if(f->teleport&&f->replace){video.invulnerability=R(0x55);video.restoring=1;W(0x55,0);}
 }
 void mm1_proto_part_emitted(int slot) {
+    int actor=R(0x0C);
+    if(actor>=2&&actor<=4&&slot>=0&&slot<64&&video.building_shot[actor-2].replace) {
+        video.building_shot[actor-2].mask|=1ull<<slot;return;
+    }
     if(R(0x0C)||!video.building.replace||slot<0||slot>=64)return;
     BodyFrame *f=&video.building;f->mask|=1ull<<slot;
-    f->behind=(uint8_t)((R(0x200+slot*4+2)&32)!=0);
+    /* Native poses can put an individual part behind terrain. The custom
+     * whole body inherits the stage's actor policy, never its last part. */
+    f->behind=(uint8_t)((R(0x13)&32)!=0);
 }
 void mm1_proto_pose_done(void) {
+    int actor=R(0x0C);
+    if(actor>=2&&actor<=4) {
+        ShotFrame *f=&video.building_shot[actor-2];
+        for(int slot=0;slot<64;slot++)if(f->mask&(1ull<<slot))
+            for(int k=0;k<4;k++)f->oam[slot*4+k]=R(0x200+slot*4+k);
+        return;
+    }
     if(R(0x0C))return;
     for(int slot=0;slot<64;slot++)if(video.building.mask&(1ull<<slot))
         for(int k=0;k<4;k++)video.building.oam[slot*4+k]=R(0x200+slot*4+k);
@@ -64,6 +93,8 @@ void mm1_proto_pose_done(void) {
 }
 void mm1_proto_draw_latch(void) {
     restore_invulnerability();video.shown=video.building;
+    memcpy(video.shown_shot,video.building_shot,sizeof video.shown_shot);
+    for(int k=0;k<256;k++)video.page[k]=R(0x200+k);
     for(int slot=0;slot<64;slot++)if(video.shown.mask&(1ull<<slot))
         for(int k=0;k<4;k++)if(video.shown.oam[slot*4+k]!=R(0x200+slot*4+k)){
             video.shown.mask=0;return;
@@ -71,19 +102,31 @@ void mm1_proto_draw_latch(void) {
 }
 static int valid_picture(void) {
     BodyFrame *f=&video.shown;
-    if(!mm1_proto_available()||!mm1_proto_atlas()||!f->replace||!f->mask)return 0;
+    if(!mm1_proto_available()||!mm1_proto_atlas()||!f->replace||!f->mask||mm1_controls_menu())return 0;
     const uint8_t *oam=cyc_render_oam();
     for(int slot=0;slot<64;slot++)if(f->mask&(1ull<<slot))
         if(memcmp(f->oam+slot*4,oam+slot*4,4))return 0;
     return 1;
 }
-int mm1_proto_owns_slot(int slot) {
-    return slot>=0&&slot<64&&valid_picture()&&(video.shown.mask&(1ull<<slot))!=0;
+static int valid_shot(int actor) {
+    if(actor<2||actor>4||!mm1_charge_available()||!mm1_charge_data()||mm1_controls_menu())return 0;
+    ShotFrame *f=&video.shown_shot[actor-2];if(!f->replace)return 0;
+    const uint8_t *oam=cyc_render_oam();
+    if(memcmp(video.page,oam,256))return 0;
+    for(int slot=0;slot<64;slot++)if(f->mask&(1ull<<slot))
+        if(memcmp(f->oam+slot*4,oam+slot*4,4))return 0;
+    return 1;
 }
-static uint32_t color(unsigned index,int weapon,int proto) {
+int mm1_proto_owns_slot(int slot) {
+    if(slot<0||slot>=64)return 0;
+    if(valid_picture()&&(video.shown.mask&(1ull<<slot)))return 1;
+    for(int i=2;i<5;i++)if(valid_shot(i)&&(video.shown_shot[i-2].mask&(1ull<<slot)))return 1;
+    return 0;
+}
+static uint32_t color(unsigned index,int weapon,int proto,int flash) {
     const CycProtoAtlas *atlas=mm1_proto_atlas();
     uint32_t c=atlas->colors[index-1];
-    if(weapon||!proto) {
+    if(weapon||!proto||flash) {
         unsigned r=c>>16&255,g=c>>8&255,b=c&255;
         if(r==g&&g==b&&r>32&&r<240)c=cyc_render_color(17);
         else if(r>64&&r>g+b)c=cyc_render_color(18);
@@ -100,29 +143,68 @@ void mm1_proto_paint(uint32_t *out,int width,int x0,const uint8_t *coverage) {
         if(x<0||x>=width||y<0||y>=240)continue;
         if(!(cyc_render_line_mask(y)&16)||(nx>=0&&nx<8&&!(cyc_render_line_mask(y)&4)))continue;
         if(f->behind&&coverage&&coverage[y*width+x])continue;
-        out[y*width+x]=color(index,f->weapon,f->proto&&!f->teleport);
+        out[y*width+x]=color(index,f->weapon,f->proto&&!f->teleport,f->flash);
     }
 }
 typedef struct {uint32_t *out;int anchor;} Paint;
+static int first_slot(uint64_t mask){for(int i=0;i<64;i++)if(mask&(1ull<<i))return i;return -1;}
+int mm1_video_replaces_actor(int actor) {
+    if(!actor)return valid_picture();return valid_shot(actor);
+}
+int mm1_video_actor_has_oam(int actor) {
+    return actor>=2&&actor<=4&&valid_shot(actor)&&video.shown_shot[actor-2].mask!=0;
+}
+static void paint_shot(uint32_t *out,int width,int x0,const uint8_t *coverage,int actor) {
+    if(!valid_shot(actor))return;
+    ShotFrame *f=&video.shown_shot[actor-2];const CycMm4ChargeData *d=mm1_charge_data();
+    const CycMm4ChargeSprite *s=&d->sprites[f->sprite];
+    for(int part=s->count-1;part>=0;part--) {
+        int key=0;while(key<6&&cyc_mm4_charge_tile_ids[key]!=s->tile[part])key++;if(key==6)continue;
+        int attr=s->attr[part]^(f->right?64:0),px=f->x+s->x[f->right][part],py=f->y+s->y[f->right][part];
+        for(int row=0;row<8;row++)for(int col=0;col<8;col++) {
+            int y=py+row,nx=px+col,x=nx+x0;if(x<0||x>=width||y<0||y>=240)continue;
+            if(!(cyc_render_line_mask(y)&16)||(nx>=0&&nx<8&&!(cyc_render_line_mask(y)&4)))continue;
+            int r=(attr&128)?7-row:row,bit=(attr&64)?col:7-col;
+            int value=((d->tiles[key][r]>>bit)&1)|(((d->tiles[key][r+8]>>bit)&1)<<1);
+            if(!value||((attr&32)&&coverage&&coverage[y*width+x]))continue;
+            out[y*width+x]=cyc_render_color_value(d->palette[attr&1][value]);
+        }
+    }
+}
+void mm1_video_paint_actor(uint32_t *out,int width,int x0,const uint8_t *coverage,int actor) {
+    if(!actor)mm1_proto_paint(out,width,x0,coverage);else paint_shot(out,width,x0,coverage,actor);
+}
+void mm1_video_paint_slot(uint32_t *out,int width,int x0,const uint8_t *coverage,int slot) {
+    if(valid_picture()&&first_slot(video.shown.mask)==slot)mm1_proto_paint(out,width,x0,coverage);
+    for(int i=2;i<5;i++)if(valid_shot(i)&&first_slot(video.shown_shot[i-2].mask)==slot)
+        paint_shot(out,width,x0,coverage,i);
+}
 static int place(int slot,int x,int y,int *out_x,void *context) {
     (void)y;Paint *p=(Paint*)context;*out_x=x;
-    if(!(video.shown.mask&(1ull<<slot)))return 1;
-    if(slot==p->anchor)mm1_proto_paint(p->out,256,0,cyc_frame_bg_opaque());
+    if(!mm1_proto_owns_slot(slot))return 1;
+    mm1_video_paint_slot(p->out,256,0,cyc_frame_bg_opaque(),slot);
     return 0;
 }
 int mm1_proto_native_picture(uint32_t *out) {
-    if(!valid_picture()||!cyc_render_background(out))return 0;
-    int first=64;for(int i=0;i<64;i++)if(video.shown.mask&(1ull<<i)){first=i;break;}
-    Paint p={out,first};cyc_render_sprites(out,256,240,0,cyc_frame_bg_opaque(),place,&p);return 1;
+    int any=valid_picture();for(int i=2;i<5;i++)any|=valid_shot(i);
+    if(!any||!cyc_render_background(out))return 0;
+    Paint p={out,0};cyc_render_sprites(out,256,240,0,cyc_frame_bg_opaque(),place,&p);
+    for(int i=2;i<5;i++)if(valid_shot(i)&&!video.shown_shot[i-2].mask)
+        paint_shot(out,256,0,cyc_frame_bg_opaque(),i);
+    return 1;
 }
 int mm1_video_state_get(uint8_t *out,int cap) {
     if(cap<(int)sizeof video)return -1;memcpy(out,&video,sizeof video);return sizeof video;
 }
 int mm1_video_state_valid(const uint8_t *in,int len) {
-    if(!len)return !mm1_proto_available();
+    if(!len)return !mm1_proto_available()&&!mm1_charge_available();
     if(!in||len!=sizeof video)return 0;Presentation v;memcpy(&v,in,sizeof v);
-    return v.restoring<=1&&v.building.pose<CYC_PROTO_POSE_COUNT&&v.shown.pose<CYC_PROTO_POSE_COUNT&&
-        v.building.right<=1&&v.shown.right<=1&&v.building.replace<=1&&v.shown.replace<=1;
+    if(v.restoring>1||v.building.pose>=CYC_PROTO_POSE_COUNT||v.shown.pose>=CYC_PROTO_POSE_COUNT||
+        v.building.right>1||v.shown.right>1||v.building.replace>1||v.shown.replace>1)return 0;
+    for(int i=0;i<3;i++)if(v.building_shot[i].sprite>=7||v.shown_shot[i].sprite>=7||
+        v.building_shot[i].right>1||v.shown_shot[i].right>1||
+        v.building_shot[i].replace>1||v.shown_shot[i].replace>1)return 0;
+    return 1;
 }
 int mm1_video_state_set(const uint8_t *in,int len) {
     if(!mm1_video_state_valid(in,len))return 0;

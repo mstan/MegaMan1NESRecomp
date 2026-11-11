@@ -34,6 +34,7 @@ int mm1_controls_safe(void);
 int mm1_proto_available(void){return enabled;}
 int mm1_proto_selected(void){return enabled&&state.selected;}
 int mm1_proto_teleporting(void){return enabled&&state.teleport;}
+int mm1_proto_real_traits(void){return mm1_proto_selected()&&real_mode;}
 const CycProtoAtlas *mm1_proto_atlas(void){return loaded?&atlas:NULL;}
 static int playable(void) {
     return mm1_controls_safe();
@@ -55,7 +56,7 @@ static void set_enabled(int on) {
     nes_mod_set_function_hook_enabled("mm1.proto.player",enabled);
     nes_mod_set_function_hook_enabled("mm1.proto.damage",enabled);
     nes_mod_set_function_hook_enabled("mm1.proto.shots",enabled);
-    nes_mod_set_function_hook_enabled("mm1.proto.pose-done",enabled);
+    nes_mod_set_function_hook_enabled("mm1.proto.muzzle",enabled);
     mm1_reflect_configure(enabled&&real_mode);
     mm1_controls_refresh();mm1_video_character_changed();
 }
@@ -90,6 +91,26 @@ static int shots(uint16_t address) {
     if(count<2)return 0;
     CycModRegs regs;cyc_mod_regs(&regs);regs.x=R(0x2F);cyc_mod_set_regs(&regs);
     state.shot_limit++;return 1;
+}
+int mm1_proto_muzzle_y(int native_offset) {
+    int offset=native_offset;
+    if(mm1_proto_selected()&&!mm1_weapon_identity()) {
+        int type=R(0x400);
+        offset=(type==9||type==10||type==0x6F)?-5:
+            (type>=21&&type<=24)||type==0x70?-4:3;
+        if(type==6||type==7||type==12) {
+            static const uint8_t phases[]={0,1,2,1};
+            offset=phases[(R(0x440)>>4)&3]==1?2:3;
+        }
+    }
+    return (int)R(0x600)+offset;
+}
+static int muzzle(uint16_t address) {
+    (void)address;CycModRegs r;cyc_mod_regs(&r);
+    if(mm1_proto_selected()&&!mm1_weapon_identity()&&r.x>=2&&r.x<=4) {
+        int y=mm1_proto_muzzle_y(0);r.a=(uint8_t)(y>=0&&y<240?y:248);cyc_mod_set_regs(&r);
+    }
+    return 0;
 }
 static void input(void *ctx,uint8_t buttons[2]) {
     (void)ctx;
@@ -216,6 +237,7 @@ NES_MOD_CONSTRUCTOR(register_mm1_proto) {
     nes_mod_register_function_entry_plugin("mm1.proto.player",0x94A8,player);
     nes_mod_register_function_entry_plugin("mm1.proto.damage",0xA23D,damage);
     nes_mod_register_function_entry_plugin("mm1.proto.shots",0xA747,shots);
+    nes_mod_register_function_entry_plugin("mm1.proto.muzzle",0xA970,muzzle);
     nes_mod_register_function_entry_plugin("mm1.proto.pose-done",0xD2A3,pose_done);
     nes_mod_register_reset_callback(reset);nes_mod_register_activation_plugin("mm1.protoman",activate);
     nes_mod_register_savestate_hook("mm1.protoman",get,put);nes_mod_register_savestate_validator("mm1.protoman",valid);

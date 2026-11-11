@@ -62,7 +62,11 @@ if(NESRECOMP_BACKEND STREQUAL "cycle")
             "${CMAKE_CURRENT_SOURCE_DIR}/mm1_host.c" "${CMAKE_CURRENT_SOURCE_DIR}/mm1_weapons.c"
             "${CMAKE_CURRENT_SOURCE_DIR}/mm1_proto.c" "${CMAKE_CURRENT_SOURCE_DIR}/mm1_proto_video.c"
             "${CMAKE_CURRENT_SOURCE_DIR}/mm1_reflect.c"
-            "${NESRECOMP_ROOT}/runner/cyc/cyc_protoman_atlas.c")
+            "${CMAKE_CURRENT_SOURCE_DIR}/mm1_charge.c"
+            "${NESRECOMP_ROOT}/runner/cyc/cyc_protoman_atlas.c"
+            "${NESRECOMP_ROOT}/runner/cyc/cyc_mm4_donor.c"
+            "${NESRECOMP_ROOT}/runner/cyc/cyc_mm4_audio.c"
+            "${NESRECOMP_ROOT}/runner/cyc/cyc_mm4_charge_data.c")
     nesrecomp_add_cycle_game(MegaManRecomp
         ROM "${NESRECOMP_ROM}" GAME_CONFIG "${MEGAMAN_GAME_CONFIG}"
         RECOMPILER "${NESRECOMP_HOST_COMPILER}" SEED_FILE "${MEGAMAN_CYCLE_SEEDS}"

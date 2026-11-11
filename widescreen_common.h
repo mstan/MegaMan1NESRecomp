@@ -14,6 +14,7 @@
 #include "mm1_proto.h"
 #include "mm1_proto_video.h"
 #include "mm1_charge.h"
+#include "mm1_slide.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -137,6 +138,7 @@ static int render(uint32_t *out,int width,int height,int x0,const uint32_t *nati
     }
     /* Signed packets also repaint selected native pixels when byte-X sprites
      * have wrapped or the console's column guards interrupt the wide view. */
+    mm1_video_paint_dust(out,width,x0,coverage);
     for(int i=ws.display.count-1;i>=0;i--) {
         WsSprite *s=&ws.display.tile[i];
         if(replaced&&mm1_video_replaces_actor(s->owner)) {
@@ -175,7 +177,7 @@ static void enable(int on) {
     if(!on)memset(&ws,0,sizeof ws);
 }
 void mm1_video_character_changed(void) {
-    int character=mm1_proto_available()||mm1_charge_available();
+    int character=mm1_proto_available()||mm1_charge_available()||mm1_slide_available();
     for(size_t i=0;i<sizeof(hook_ids)/sizeof(hook_ids[0]);i++)
         nes_mod_set_function_hook_enabled(hook_ids[i],enabled||(character&&(i==0||i==1||i==2||i==6)));
     cyc_render_capture_background(character!=0);

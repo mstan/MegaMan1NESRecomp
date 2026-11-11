@@ -162,3 +162,58 @@ bytes = "A9 FE 20 77 C4 A9 FF 20"
 id = "mm1.charge.stage-clear"
 addr = 0xC05A
 bytes = "A9 00 85 3E A9 FE 20 77"
+
+[[mod_function_hook]]
+id = "mm1.slide.player"
+addr = 0x94A8
+bank = 5
+bytes = "A2 00 86 2F AD 20 04 29"
+
+[[mod_function_hook]]
+id = "mm1.slide.after"
+addr = 0x918D
+bank = 5
+bytes = "A5 94 F0 09 A5 B1 D0 05"
+
+[[mod_function_hook]]
+id = "mm1.slide.speed"
+addr = 0xC567
+bytes = "48 29 F0 9D E0 04 68 29"
+
+[[mod_function_hook]]
+id = "mm1.slide.right-width"
+addr = 0x9E42
+bank = 5
+bytes = "85 10 18 A5 22 65 10 85"
+
+[[mod_function_hook]]
+id = "mm1.slide.left-width"
+addr = 0x9EC2
+bank = 5
+bytes = "85 10 38 A5 22 E5 10 85"
+
+[[mod_function_hook]]
+id = "mm1.slide.side-probe"
+addr = 0xCB83
+bytes = "7D 96 CB 85 0E 20 B7 CC"
+
+[[mod_function_hook]]
+id = "mm1.slide.feet"
+addr = 0xCC44
+bytes = "85 0D A5 01 7D 5B CC 85"
+
+[[mod_function_hook]]
+id = "mm1.slide.contact"
+addr = 0xA1A8
+bank = 5
+bytes = "A5 55 D0 16 A5 3E C9 05"
+
+[[mod_function_hook]]
+id = "mm1.slide.player-killed"
+addr = 0xC219
+bytes = "A9 FE 20 77 C4 A9 FF 20"
+
+[[mod_function_hook]]
+id = "mm1.slide.stage-clear"
+addr = 0xC05A
+bytes = "A9 00 85 3E A9 FE 20 77"

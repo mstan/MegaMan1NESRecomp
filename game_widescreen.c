@@ -68,7 +68,7 @@ static void game_draw_native(uint32_t *out,int width,int x0) {
         int kind=ws.display_oam_kind[i],x=o[3],force=0;
         if(kind==1){x=ws.display_oam_x[i]-camera_x;force=x!=o[3];}
         if(kind==2){x=ws.display_oam_x[i]-x0;force=1;}
-        draw_tile(out,width,x0,x0+x,o[0]+1,o[1],o[2],force||first>=0);
+        draw_tile(out,width,x0,x0+x,o[0]+1,o[1],o[2],force||first>=0||mm1_video_dust_visible());
     }
 }
 static void game_dma(void) {
@@ -177,6 +177,7 @@ static void load_visible(void) {
 static int hook(uint16_t addr) {
     if(addr==MM_DMA0){mm1_proto_draw_latch();if(enabled)dma_packet();return 0;}
     if(addr==MM_BUILD){
+        mm1_slide_restore_input();
         mm1_proto_draw_begin();
         ws.build.count=0;memset(ws.build_oam_kind,0,sizeof ws.build_oam_kind);draw_pending=0;return 0;
     }

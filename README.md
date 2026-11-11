@@ -17,13 +17,15 @@ incoming damage. Its normal-stat reskin option retains Mega Man's behavior.
 Current checks cover native/interpreter agreement, Fit sprite placement,
 current-build state replay and native enemy/boss collision paths.
 
-The optional charged Buster reads graphics, timing and sounds from your Mega
-Man 4 (USA) ROM at launch. Both characters can charge; half shots use normal
-Buster damage, full shots triple it and continue through lethal enemy hits.
+The optional slide and charged Buster read graphics, timing and sounds from your
+Mega Man 4 (USA) ROM at launch. Both characters share these abilities. Down + A
+starts a low slide using the original game's terrain, collision and camera.
+Half shots use normal Buster damage; full shots triple it and continue through
+lethal enemy hits.
 The donor image and its artwork are never written into the package. Charging,
-active-shot state/audio replay and native damage paths have targeted checks.
-Sliding, character-specific inventory art and multiplayer parity remain under
-development.
+active-shot state/audio replay, slide movement/ceilings/contact and native
+damage paths have targeted checks. Character-specific inventory art and
+multiplayer parity remain under development.
 
 ## Cycle backend migration branch
 

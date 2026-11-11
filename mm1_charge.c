@@ -2,6 +2,7 @@
 #include "mm1_charge.h"
 #include "mm1_proto.h"
 #include "mm1_reflect.h"
+#include "mm1_slide.h"
 #include "cyc_core.h"
 #include "cyc_mod.h"
 #include "cyc_ring.h"
@@ -17,7 +18,7 @@
 enum {HALF=1,FULL=2,HALF_AT=32,FULL_AT=92,LOOP_AT=100};
 typedef struct {uint8_t kind,age,animation,frame,tick,right;} Shot;
 typedef struct {
-    char magic[4];uint8_t on,counter,flashing,last_counter,previous,keep_slot,keep_y,keep;
+    char magic[4];uint8_t on,counter,flashing,last_counter,pending,keep_slot,keep_y,keep;
     Shot shot[3];uint32_t full_hits,override_offset;uint8_t override_old,override_value,overriding,pad;
     uint64_t half,full,passes,canceled;
 } Charge;
@@ -61,7 +62,7 @@ static void flash(void) {
     palette(colors);C.flashing=1;
 }
 void mm1_charge_cancel(void) {
-    if(C.counter)C.canceled++;C.counter=C.previous=C.last_counter=0;
+    if(C.counter)C.canceled++;C.counter=C.pending=C.last_counter=0;
     normal_palette();cyc_mm4_audio_stop(0x22);cyc_mm4_audio_stop(0x27);
 }
 void mm1_charge_weapon_changed(void) {
@@ -119,9 +120,13 @@ void mm1_charge_dispatch(void) {
     } else if(C.counter) {
         int count=C.counter;C.counter=0;normal_palette();
         cyc_mm4_audio_stop(0x22);cyc_mm4_audio_stop(0x27);
-        if(count>=HALF_AT)fire(count>=FULL_AT?FULL:HALF);
-    } else if(fresh)C.counter=1;
-    C.last_counter=C.counter;C.previous=(uint8_t)held;
+        if(mm1_slide_active())C.pending=(uint8_t)count;
+        else if(count>=HALF_AT)fire(count>=FULL_AT?FULL:HALF);
+    } else if(fresh&&!mm1_slide_active())C.counter=1;
+    if(C.pending&&!mm1_slide_active()) {
+        if(C.pending>=HALF_AT)fire(C.pending>=FULL_AT?FULL:HALF);C.pending=0;
+    }
+    C.last_counter=C.counter;
     if(full_alive())W(0x18,R(0x18)&~2);steer();
 }
 static int full_slot(void){int s=R(0x2F);return s>=2&&s<5&&C.shot[s-2].kind==FULL&&R(0x400+s)==0x1A&&mm1_weapon_identity()==0;}
@@ -191,11 +196,11 @@ static void frame_end(void *ctx) {
 }
 static void mix(void *ctx,int16_t *samples,size_t count){(void)ctx;cyc_mm4_audio_mix(samples,count);}
 static int get(uint8_t *out,int cap) {
-    if(cap<(int)sizeof C)return -1;memcpy(C.magic,"MC01",4);C.on=(uint8_t)enabled;memcpy(out,&C,sizeof C);return sizeof C;
+    if(cap<(int)sizeof C)return -1;memcpy(C.magic,"MC02",4);C.on=(uint8_t)enabled;memcpy(out,&C,sizeof C);return sizeof C;
 }
 static int valid(const uint8_t *in,int len) {
     if(!len)return !enabled;if(!in||len!=sizeof C)return 0;Charge n;memcpy(&n,in,sizeof n);
-    if(memcmp(n.magic,"MC01",4)||n.on!=enabled||n.counter>=LOOP_AT||n.flashing>1||n.overriding>1||n.keep>1)return 0;
+    if(memcmp(n.magic,"MC02",4)||n.on!=enabled||n.counter>=LOOP_AT||n.pending>=LOOP_AT||n.flashing>1||n.overriding>1||n.keep>1)return 0;
     if(n.overriding&&(n.override_offset<7u*0x4000u||n.override_offset>=8u*0x4000u))return 0;
     if(n.keep&&(n.keep_slot<2||n.keep_slot>4))return 0;
     for(int i=0;i<3;i++)if(n.shot[i].kind>FULL||n.shot[i].animation>2||n.shot[i].right>1||

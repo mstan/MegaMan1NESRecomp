@@ -6,6 +6,7 @@
 #include "cyc_tcp.h"
 #include "mm1_proto.h"
 #include "mm1_charge.h"
+#include "mm1_slide.h"
 #include "logical_input.h"
 #include "mod_runtime.h"
 #include "mod_function_hooks.h"
@@ -35,7 +36,7 @@ int mm1_controls_gameplay(void) {
         R(0x6A)&&!R(0x1E)&&!R(0x26)&&!R(0x41)&&!state.menu;
 }
 void mm1_controls_refresh(void) {
-    int on=enabled||mm1_proto_available()||mm1_charge_available();
+    int on=enabled||mm1_proto_available()||mm1_charge_available()||mm1_slide_available();
     nes_mod_set_function_hook_enabled("mm1.weapons.dispatch",on);
     nes_mod_set_function_hook_enabled("mm1.weapons.menu-enter",on);
     nes_mod_set_function_hook_enabled("mm1.weapons.menu-leave",on);
@@ -143,7 +144,7 @@ static void tcp_setup(void *ctx){(void)ctx;cyc_tcp_register("mm1_weapons","quick
 static int menu_enter(uint16_t address){(void)address;state.menu=1;state.pending=0;mm1_charge_cancel();return 0;}
 static int menu_leave(uint16_t address){(void)address;state.menu=0;state.pending=0;return 0;}
 static int stage_enter(uint16_t address){
-    (void)address;state.ready=0;state.pending=0;mm1_proto_stage_enter();mm1_charge_stage_enter();return 0;
+    (void)address;state.ready=0;state.pending=0;mm1_proto_stage_enter();mm1_charge_stage_enter();mm1_slide_stage_enter();return 0;
 }
 const CycHostExtras *mm1_weapons_extras(void) {
     static const CycInputProfile profile={.id="megaman-weapons-1",

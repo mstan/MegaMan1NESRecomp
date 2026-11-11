@@ -63,6 +63,7 @@ if(NESRECOMP_BACKEND STREQUAL "cycle")
             "${CMAKE_CURRENT_SOURCE_DIR}/mm1_proto.c" "${CMAKE_CURRENT_SOURCE_DIR}/mm1_proto_video.c"
             "${CMAKE_CURRENT_SOURCE_DIR}/mm1_reflect.c"
             "${CMAKE_CURRENT_SOURCE_DIR}/mm1_charge.c"
+            "${CMAKE_CURRENT_SOURCE_DIR}/mm1_slide.c"
             "${NESRECOMP_ROOT}/runner/cyc/cyc_protoman_atlas.c"
             "${NESRECOMP_ROOT}/runner/cyc/cyc_mm4_donor.c"
             "${NESRECOMP_ROOT}/runner/cyc/cyc_mm4_audio.c"

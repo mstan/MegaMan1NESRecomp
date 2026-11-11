@@ -14,6 +14,8 @@ void mm1_video_paint_slot(uint32_t *out,int width,int x0,const uint8_t *coverage
 void mm1_video_paint_actor(uint32_t *out,int width,int x0,const uint8_t *coverage,int actor);
 int mm1_video_replaces_actor(int actor);
 int mm1_video_actor_has_oam(int actor);
+int mm1_video_dust_visible(void);
+void mm1_video_paint_dust(uint32_t *out,int width,int x0,const uint8_t *coverage);
 int mm1_video_state_get(uint8_t *out,int cap);
 int mm1_video_state_valid(const uint8_t *in,int len);
 int mm1_video_state_set(const uint8_t *in,int len);

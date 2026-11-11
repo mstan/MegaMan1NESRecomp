@@ -3,6 +3,7 @@
 #include "mm1_proto_sheet.h"
 #include "mm1_proto_video.h"
 #include "mm1_reflect.h"
+#include "mm1_slide.h"
 #include "cyc_core.h"
 #include "cyc_mod.h"
 #include "cyc_render.h"
@@ -67,7 +68,7 @@ static void sound(uint8_t track) {
 int mm1_proto_dispatch(void) {
     if(!enabled)return 0;
     unsigned fresh=state.pending;state.pending=0;
-    if(fresh && !state.teleport && playable()) {
+    if(fresh && !state.teleport && playable() && mm1_slide_cancel_for_switch()) {
         state.teleport=1;state.invulnerability=R(0x55);state.swaps++;
         W(0x640,0);sound(0x20);mm1_video_character_changed();
     }
@@ -151,6 +152,7 @@ int mm1_proto_guarding(void) {
 }
 int mm1_proto_pose_id(void) {
     if(state.teleport)return CYC_PROTO_TELEPORT;
+    if(mm1_slide_active())return CYC_PROTO_SLIDE;
     int type=R(0x400)+(R(0x640)>>4),frame=R(0x440)>>4;
     static const int run[]={0,1,2,1};
     switch(type) {

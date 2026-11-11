@@ -12,4 +12,5 @@ const uint8_t *mm1_slide_dust_tile(int age);
 int mm1_slide_dust(int *world_x,int *y,int *right,int *age);
 void mm1_slide_stage_enter(void);
 void mm1_slide_restore_input(void);
+void mm1_slide_after_run(void);
 const CycHostExtras *mm1_slide_extras(void);

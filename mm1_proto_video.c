@@ -4,6 +4,7 @@
 #include "mm1_reflect.h"
 #include "mm1_charge.h"
 #include "mm1_slide.h"
+#include "mm1_coop.h"
 #include "cyc_mod.h"
 #include "cyc_render.h"
 #include "mod_runtime.h"
@@ -261,9 +262,10 @@ static int place(int slot,int x,int y,int *out_x,void *context) {
     return 0;
 }
 int mm1_proto_native_picture(uint32_t *out) {
-    int any=valid_picture()||mm1_video_dust_visible()||valid_portrait();for(int i=2;i<5;i++)any|=valid_shot(i);
+    int any=valid_picture()||mm1_video_dust_visible()||valid_portrait()||mm1_coop_picture();for(int i=2;i<5;i++)any|=valid_shot(i);
     if(!any||!cyc_render_background(out))return 0;
     mm1_video_paint_dust(out,256,0,cyc_frame_bg_opaque());
+    mm1_coop_paint(out,256,0,cyc_frame_bg_opaque());
     Paint p={out,0};cyc_render_sprites(out,256,240,0,cyc_frame_bg_opaque(),place,&p);
     for(int i=2;i<5;i++)if(valid_shot(i)&&!video.shown_shot[i-2].mask)
         paint_shot(out,256,0,cyc_frame_bg_opaque(),i);

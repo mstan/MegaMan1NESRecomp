@@ -6,7 +6,8 @@ const CycHostExtras *mm1_weapons_extras(void);
 const CycHostExtras *mm1_proto_extras(void);
 const CycHostExtras *mm1_charge_extras(void);
 const CycHostExtras *mm1_slide_extras(void);
-enum {PARTS=5};
+const CycHostExtras *mm1_coop_extras(void);
+enum {PARTS=6};
 static const CycHostExtras *parts[PARTS];
 static CycHostExtras host;
 static CycHostOption options[20];
@@ -48,6 +49,7 @@ const CycHostExtras *cyc_host_extras(void) {
         parts[2]=mm1_proto_extras();
         parts[3]=mm1_charge_extras();
         parts[4]=mm1_slide_extras();
+        parts[5]=mm1_coop_extras();
         host.power_on=power_on;host.frame_end=frame_end;host.input=input;
         host.frame_begin=frame_begin;
         host.audio_mix=audio_mix;host.audio_rate=48000;

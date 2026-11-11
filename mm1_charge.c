@@ -3,6 +3,7 @@
 #include "mm1_proto.h"
 #include "mm1_reflect.h"
 #include "mm1_slide.h"
+#include "mm1_coop.h"
 #include "cyc_core.h"
 #include "cyc_mod.h"
 #include "cyc_ring.h"
@@ -22,7 +23,8 @@ typedef struct {
     Shot shot[3];uint32_t full_hits,override_offset;uint8_t override_old,override_value,overriding,pad;
     uint64_t half,full,passes,canceled;
 } Charge;
-static Charge C;
+static Charge charges[2];
+#define C (charges[mm1_coop_seat()])
 static int enabled,loaded;
 static char donor_path[1024];
 static CycMm4ChargeData data;
@@ -185,7 +187,7 @@ int mm1_mm4_load(const char *feature) {
     return load_donor(path);
 }
 static void power_on(void *ctx){
-    (void)ctx;memset(&C,0,sizeof C);cyc_mm4_audio_configure(enabled!=0,true);cyc_mm4_audio_reset();
+    (void)ctx;memset(charges,0,sizeof charges);cyc_mm4_audio_configure(enabled!=0,true);cyc_mm4_audio_reset();
 }
 static void frame_end(void *ctx) {
     (void)ctx;cyc_mm4_audio_frame_end();
@@ -196,20 +198,29 @@ static void frame_end(void *ctx) {
 }
 static void mix(void *ctx,int16_t *samples,size_t count){(void)ctx;cyc_mm4_audio_mix(samples,count);}
 static int get(uint8_t *out,int cap) {
-    if(cap<(int)sizeof C)return -1;memcpy(C.magic,"MC02",4);C.on=(uint8_t)enabled;memcpy(out,&C,sizeof C);return sizeof C;
+    if(cap<(int)sizeof charges)return -1;
+    for(int i=0;i<2;i++){memcpy(charges[i].magic,"MC03",4);charges[i].on=(uint8_t)enabled;}
+    memcpy(out,charges,sizeof charges);return sizeof charges;
 }
-static int valid(const uint8_t *in,int len) {
-    if(!len)return !enabled;if(!in||len!=sizeof C)return 0;Charge n;memcpy(&n,in,sizeof n);
-    if(memcmp(n.magic,"MC02",4)||n.on!=enabled||n.counter>=LOOP_AT||n.pending>=LOOP_AT||n.flashing>1||n.overriding>1||n.keep>1)return 0;
+static int valid_record(Charge n) {
+    if(memcmp(n.magic,"MC03",4)||n.on!=enabled||n.counter>=LOOP_AT||n.pending>=LOOP_AT||n.flashing>1||n.overriding>1||n.keep>1)return 0;
     if(n.overriding&&(n.override_offset<7u*0x4000u||n.override_offset>=8u*0x4000u))return 0;
     if(n.keep&&(n.keep_slot<2||n.keep_slot>4))return 0;
     for(int i=0;i<3;i++)if(n.shot[i].kind>FULL||n.shot[i].animation>2||n.shot[i].right>1||
         (n.shot[i].kind&&n.shot[i].frame>data.animations[n.shot[i].animation].last))return 0;
     return 1;
 }
+static int valid(const uint8_t *in,int len) {
+    if(!len)return !enabled;if(!in||len!=sizeof charges)return 0;
+    Charge records[2];memcpy(records,in,sizeof records);
+    return valid_record(records[0])&&valid_record(records[1])&&!(records[0].overriding&&records[1].overriding);
+}
 static int put(const uint8_t *in,int len) {
-    if(!valid(in,len))return 0;clear_override();memset(&C,0,sizeof C);if(len)memcpy(&C,in,sizeof C);
-    if(C.overriding&&!cyc_mod_set_prg_read_override(C.override_offset,C.override_old,C.override_value))return 0;return 1;
+    if(!valid(in,len))return 0;
+    for(int i=0;i<2;i++)if(charges[i].overriding)cyc_mod_remove_prg_read_override(charges[i].override_offset);
+    memset(charges,0,sizeof charges);if(len)memcpy(charges,in,sizeof charges);
+    for(int i=0;i<2;i++){Charge *n=&charges[i];if(n->overriding&&
+        !cyc_mod_set_prg_read_override(n->override_offset,n->override_old,n->override_value))return 0;}return 1;
 }
 static void reset(void){set_enabled(0);}
 static void activate(void) {

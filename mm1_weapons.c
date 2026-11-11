@@ -7,6 +7,7 @@
 #include "mm1_proto.h"
 #include "mm1_charge.h"
 #include "mm1_slide.h"
+#include "mm1_coop.h"
 #include "logical_input.h"
 #include "mod_runtime.h"
 #include "mod_function_hooks.h"
@@ -19,7 +20,8 @@
 static int enabled;
 static FILE *report;
 typedef struct { uint8_t magic[4],on,previous,pending,menu,ready,stage,pad[2];uint64_t changes; } WeaponState;
-static WeaponState state;
+static WeaponState states[2];
+#define state (states[mm1_coop_seat()])
 static unsigned attempt_frame,attempt_reason,attempt_edge,attempt_owned,fresh_inputs;
 /* Native bank6 B50D/B515, expressed in its displayed inventory order. */
 static const uint8_t order[]={0,5,4,1,6,2,3,7};
@@ -36,7 +38,7 @@ int mm1_controls_gameplay(void) {
         R(0x6A)&&!R(0x1E)&&!R(0x26)&&!R(0x41)&&!state.menu;
 }
 void mm1_controls_refresh(void) {
-    int on=enabled||mm1_proto_available()||mm1_charge_available()||mm1_slide_available();
+    int on=enabled||mm1_proto_available()||mm1_charge_available()||mm1_slide_available()||mm1_coop_available();
     nes_mod_set_function_hook_enabled("mm1.weapons.dispatch",on);
     nes_mod_set_function_hook_enabled("mm1.weapons.menu-enter",on);
     nes_mod_set_function_hook_enabled("mm1.weapons.menu-leave",on);
@@ -64,14 +66,11 @@ static int owned_sprite(int weapon,int sprite,int slot) {
     default:return 0;
     }
 }
-static int dispatch(uint16_t address) {
-    (void)address;
+int mm1_weapons_player_dispatch(void) {
     /* READY and native arrival scripts can have a normal-looking player RAM
      * image. Only reaching the actual gameplay loop admits a control edge. */
     state.ready=1;state.stage=R(0x31);
     unsigned fresh=state.pending;state.pending=0;
-    if(mm1_proto_dispatch()){mm1_charge_cancel();return 0;}
-    mm1_charge_dispatch();
     if(fresh){attempt_frame=cyc_ring_frame;attempt_edge=R(0x18);attempt_owned=R(0x5D);attempt_reason=0;}
     if(!enabled || (fresh!=CYC_GAME_L && fresh!=CYC_GAME_R) || !safe() || (R(0x18)&12)) {
         if(fresh)attempt_reason=!enabled?1:(fresh!=1&&fresh!=2)?2:!safe()?3:4;
@@ -94,16 +93,30 @@ static int dispatch(uint16_t address) {
     state.changes++;
     return 0;
 }
+static int dispatch(uint16_t address) {
+    (void)address;state.ready=1;state.stage=R(0x31);
+    mm1_coop_dispatch();
+    if(mm1_proto_dispatch()){mm1_charge_cancel();return 0;}
+    mm1_charge_dispatch();return mm1_weapons_player_dispatch();
+}
+static int safe_seat(int seat) {
+    if(seat==mm1_coop_seat())return safe();WeaponState *s=&states[seat];
+#define P(a) mm1_coop_read(seat,(a))
+    int result=s->ready&&s->stage==R(0x31)&&R(0x31)<10&&R(0x54)==32&&P(0x600)<248&&P(0x6A)&&
+        !(P(0x420)&15)&&!R(0x1E)&&!R(0x26)&&!R(0x41)&&!P(0x95)&&!s->menu;
+#undef P
+    return result;
+}
 static void input(void *ctx,uint8_t buttons[2]) {
     (void)ctx;(void)buttons;
-    unsigned held=nes_input_game_buttons(1)&(CYC_GAME_L|CYC_GAME_R);
-    unsigned fresh=held&~state.previous;
-    if(fresh)fresh_inputs++;
-    if(!enabled || !safe() || mm1_proto_teleporting() || held==(CYC_GAME_L|CYC_GAME_R))state.pending=0;
-    else state.pending|=(uint8_t)fresh; /* Native input polling can span a lag frame. */
-    state.previous=(uint8_t)held;
+    for(int seat=0;seat<(mm1_coop_available()?2:1);seat++) {
+        WeaponState *s=&states[seat];unsigned held=nes_input_game_buttons(seat+1)&(CYC_GAME_L|CYC_GAME_R);
+        unsigned fresh=held&~s->previous;if(fresh)fresh_inputs++;
+        if(!enabled||!safe_seat(seat)||(seat==mm1_coop_seat()&&mm1_proto_teleporting())||held==(CYC_GAME_L|CYC_GAME_R))s->pending=0;
+        else s->pending|=(uint8_t)fresh;s->previous=(uint8_t)held;
+    }
 }
-static void power_on(void *ctx){(void)ctx;memset(&state,0,sizeof state);}
+static void power_on(void *ctx){(void)ctx;memset(states,0,sizeof states);}
 static void frame_end(void *ctx){
     (void)ctx;if(!safe())state.pending=0;
     if(report)fprintf(report,"{\"frame\":%llu,\"weapon\":%u,\"changes\":%llu,\"held\":%u,\"safe\":%d,\"hp\":%u,\"palette\":[%u,%u],\"pending\":%u,\"fresh_inputs\":%u,\"attempt\":[%u,%u,%u,%u]}\n",
@@ -113,19 +126,20 @@ static void frame_end(void *ctx){
 static void reset(void){set_enabled(0);}
 static void activate(void){set_enabled(1);}
 static int get(uint8_t *out,int cap) {
-    if(cap<(int)sizeof state)return -1;
-    memcpy(state.magic,"MW03",4);state.on=(uint8_t)enabled;
-    memcpy(out,&state,sizeof state);return sizeof state;
+    if(cap<(int)sizeof states)return -1;
+    for(int i=0;i<2;i++){memcpy(states[i].magic,"MW04",4);states[i].on=(uint8_t)enabled;}
+    memcpy(out,states,sizeof states);return sizeof states;
 }
 static int valid(const uint8_t *in,int len) {
     if(!len)return !enabled;
-    if(!in || len!=sizeof state)return 0;
-    WeaponState next;memcpy(&next,in,sizeof next);
-    return !memcmp(next.magic,"MW03",4)&&next.on==enabled&&next.previous<=3&&next.pending<=3&&next.menu<=1&&next.ready<=1;
+    if(!in || len!=sizeof states)return 0;
+    WeaponState next[2];memcpy(next,in,sizeof next);
+    for(int i=0;i<2;i++)if(memcmp(next[i].magic,"MW04",4)||next[i].on!=enabled||next[i].previous>3||
+        next[i].pending>3||next[i].menu>1||next[i].ready>1)return 0;return 1;
 }
 static int put(const uint8_t *in,int len) {
     if(!valid(in,len))return 0;
-    memset(&state,0,sizeof state);if(len)memcpy(&state,in,sizeof state);return 1;
+    memset(states,0,sizeof states);if(len)memcpy(states,in,sizeof states);return 1;
 }
 static bool option(void *ctx,const char *name,const char *value) {
     (void)ctx;
@@ -144,7 +158,9 @@ static void tcp_setup(void *ctx){(void)ctx;cyc_tcp_register("mm1_weapons","quick
 static int menu_enter(uint16_t address){(void)address;state.menu=1;state.pending=0;mm1_charge_cancel();return 0;}
 static int menu_leave(uint16_t address){(void)address;state.menu=0;state.pending=0;return 0;}
 static int stage_enter(uint16_t address){
-    (void)address;state.ready=0;state.pending=0;mm1_proto_stage_enter();mm1_charge_stage_enter();mm1_slide_stage_enter();return 0;
+    (void)address;mm1_coop_stage_enter();
+    for(int i=0;i<2;i++)states[i].ready=states[i].pending=0;
+    mm1_proto_stage_enter();mm1_charge_stage_enter();mm1_slide_stage_enter();return 0;
 }
 const CycHostExtras *mm1_weapons_extras(void) {
     static const CycInputProfile profile={.id="megaman-weapons-1",

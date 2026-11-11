@@ -7,6 +7,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(NESRECOMP_ROOT "${CMAKE_SOURCE_DIR}/nesrecomp" CACHE PATH "NESRecomp engine checkout")
 set(NESRECOMP_BACKEND "cycle" CACHE STRING "CPU backend: cycle or legacy")
 set_property(CACHE NESRECOMP_BACKEND PROPERTY STRINGS cycle legacy)
+option(MM1_TEST_NMI_CONTINUATION "Test build: inject one native wait in a reflected-shot continuation" OFF)
+if(MM1_TEST_NMI_CONTINUATION)
+    set_source_files_properties(mm1_reflect.c PROPERTIES COMPILE_DEFINITIONS MM1_TEST_NMI_CONTINUATION=1)
+endif()
 if(NESRECOMP_BACKEND STREQUAL "cycle")
     set(NESRECOMP_ROM "" CACHE FILEPATH "Original North American Mega Man ROM (explicit EU input also supported)")
     if(NOT NESRECOMP_ROM AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Mega Man (USA).nes")
@@ -47,8 +51,10 @@ if(NESRECOMP_BACKEND STREQUAL "cycle")
     # Each regional cartridge has its own verified instruction boundaries.
     if(megaman_variant STREQUAL "usa")
         set(MEGAMAN_HOOKS "${CMAKE_CURRENT_SOURCE_DIR}/widescreen_hooks_usa.toml")
+        set(MEGAMAN_PLAYERS 2)
     else()
         set(MEGAMAN_HOOKS "${CMAKE_CURRENT_SOURCE_DIR}/widescreen_hooks.toml")
+        set(MEGAMAN_PLAYERS 1)
     endif()
         file(READ "${CMAKE_CURRENT_SOURCE_DIR}/game.toml" megaman_game)
         file(READ "${MEGAMAN_HOOKS}" megaman_wide_hooks)
@@ -64,6 +70,7 @@ if(NESRECOMP_BACKEND STREQUAL "cycle")
             "${CMAKE_CURRENT_SOURCE_DIR}/mm1_reflect.c"
             "${CMAKE_CURRENT_SOURCE_DIR}/mm1_charge.c"
             "${CMAKE_CURRENT_SOURCE_DIR}/mm1_slide.c"
+            "${CMAKE_CURRENT_SOURCE_DIR}/mm1_coop.c"
             "${NESRECOMP_ROOT}/runner/cyc/cyc_protoman_atlas.c"
             "${NESRECOMP_ROOT}/runner/cyc/cyc_mm4_donor.c"
             "${NESRECOMP_ROOT}/runner/cyc/cyc_mm4_audio.c"
@@ -71,7 +78,7 @@ if(NESRECOMP_BACKEND STREQUAL "cycle")
     nesrecomp_add_cycle_game(MegaManRecomp
         ROM "${NESRECOMP_ROM}" GAME_CONFIG "${MEGAMAN_GAME_CONFIG}"
         RECOMPILER "${NESRECOMP_HOST_COMPILER}" SEED_FILE "${MEGAMAN_CYCLE_SEEDS}"
-        GAME_ID "mega-man-${megaman_variant}" PLAYERS 1 REGION "${megaman_region}"
+        GAME_ID "mega-man-${megaman_variant}" PLAYERS ${MEGAMAN_PLAYERS} REGION "${megaman_region}"
         BOXART "${CMAKE_CURRENT_SOURCE_DIR}/boxart.tga" ${MEGAMAN_WIDESCREEN_ARGS})
     if(megaman_variant STREQUAL "usa")
         target_compile_definitions(MegaManRecomp PRIVATE MM1_PROFILE_USA=1)

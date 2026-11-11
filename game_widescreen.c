@@ -106,6 +106,19 @@ static int cache_rom(void) {
     if(ok){cached_stage=stage;}else failures++;
     return ok;
 }
+int mm1_world_prepare(void){return cache_rom();}
+int mm1_world_probe(int x,int y) {
+    if(cached_stage!=R(0x31)||x<0||x>=48*256||y<0||y>=240)return -1;
+    if(!R(0x68))for(int index=R(0x8E);index<256;index+=6) {
+        int a=0x720+index,screen=R(a+2);if(screen>(x>>8))break;
+        if(R(a+1)&&screen==(x>>8)&&(x&255)>=R(a+3)&&(!R(a+5)||(x&255)<R(a+5))&&
+            y>=R(a+4)&&(!R(a+6)||y<R(a+6)))return R(a+1)|128;
+    }
+    int room=level[0xC00+(x>>8)],ptr=level[0xC30+room*2]|(level[0xC31+room*2]<<8);
+    if(ptr<0x8000||ptr+64>0xC000)return -1;
+    int block=level[ptr-0x8000+((x&255)/32)*8+y/32],quad=((x&16)?2:0)+((y&16)?1:0);
+    return R(0xCD46+R(0x31)*4+(level[block*4+quad]>>6));
+}
 static int game_bg(int wx,int wy,int *tile,int *pal) {
     if(wx<0 || wy<0 || wy>=240 || wx/256<R(0x27) || wx/256>R(0x28) || !cache_rom())return 0;
     int room=level[0xC00+wx/256],ptr=level[0xC30+room*2]|(level[0xC31+room*2]<<8);
@@ -175,7 +188,8 @@ static void load_visible(void) {
     }
 }
 static int hook(uint16_t addr) {
-    if(addr==MM_DMA0){mm1_proto_draw_latch();if(enabled)dma_packet();return 0;}
+    if(mm1_coop_drawing())return 0;
+    if(addr==MM_DMA0){mm1_proto_draw_latch();mm1_coop_video_latch();if(enabled)dma_packet();return 0;}
     if(addr==MM_BUILD){
         mm1_slide_restore_input();
         mm1_proto_draw_begin();

@@ -1,6 +1,7 @@
 /* Native shield/projectiles and a real-clock continuation for boss scripts. */
 #include "mm1_reflect.h"
 #include "mm1_proto.h"
+#include "mm1_coop.h"
 #include "cyc_mod.h"
 #include "mod_function_hooks.h"
 #include "mod_runtime.h"
@@ -11,7 +12,7 @@
 #define W(a,v) cyc_mod_poke((uint16_t)(a),(uint8_t)(v))
 typedef struct {
     char magic[4];
-    uint8_t enabled,active,cursor,owner,weapon,reference,scratch[14],pad[2];
+    uint8_t enabled,active,cursor,owner,weapon,reference,scratch[14],probe_done,pad;
     CycModRegs regs;
     uint16_t reflected,before_hits;
     uint32_t buster_hits;
@@ -25,6 +26,7 @@ static void refresh(void) {
     for(int i=0;i<6;i++)nes_mod_set_function_hook_enabled(hooks[i],enabled||S.active);
 }
 int mm1_weapon_identity(void){return S.active?S.weapon:R(0x5F);}
+int mm1_reflect_busy(void){return S.active!=0;}
 void mm1_reflect_configure(int on){enabled=on!=0;refresh();}
 void mm1_reflect_reset(void){memset(&S,0,sizeof S);refresh();}
 void mm1_reflect_stage_enter(void) {
@@ -71,8 +73,9 @@ static int native_pass(uint16_t address) {
         cyc_mod_set_regs(&S.regs);r=S.regs;
     } else {
         unsigned ret=R(0x100|(uint8_t)(r.s+1))|(R(0x100|(uint8_t)(r.s+2))<<8);
-        if(!enabled||!S.reflected||ret!=0x91BB||r.s<8)return 0;
-        S.regs=r;S.weapon=R(0x5F);S.reference=R(0x2F);S.owner=0;S.cursor=14;
+        uint16_t live=0;for(int i=14;i<16;i++)if(R(0x600+i)<248&&R(0x400+i)==0x1A)live|=(uint16_t)(1u<<i);
+        if(!enabled||!live||ret!=0x91BB||r.s<8)return 0;
+        S.reflected=live;S.regs=r;S.weapon=R(0x5F);S.reference=R(0x2F);S.owner=(uint8_t)mm1_coop_seat();S.cursor=14;
         for(int i=0;i<14;i++)S.scratch[i]=R(i);
     }
     int shot=S.cursor;
@@ -88,6 +91,12 @@ static int native_pass(uint16_t address) {
     W(0x100|stack,0xE9);stack=(stack-1)&255;
     W(0x100|stack,0xC8);stack=(stack-1)&255;
     W(0x100|stack,0xB1);stack=(stack-1)&255;
+#ifdef MM1_TEST_NMI_CONTINUATION
+    /* A separate test build yields once through the original native wait.
+     * Production builds contain no injected wait. */
+    if(!S.probe_done){S.probe_done=1;W(0x100|stack,0xC0);stack=(stack-1)&255;
+        W(0x100|stack,0x1A);stack=(stack-1)&255;}
+#endif
     r.s=(uint8_t)stack;cyc_mod_set_regs(&r);S.passes++;return 1;
 }
 static int buster_damage(uint16_t address) {
@@ -116,7 +125,7 @@ static int get(uint8_t *out,int cap) {
 static int valid(const uint8_t *in,int len) {
     if(!len)return !enabled;if(!in||len!=sizeof S)return 0;
     Reflection n;memcpy(&n,in,sizeof n);
-    return !memcmp(n.magic,"MR01",4)&&n.enabled==enabled&&n.active<=1&&n.owner==0&&
+    return !memcmp(n.magic,"MR01",4)&&n.enabled==enabled&&n.active<=1&&n.owner<=1&&n.probe_done<=1&&
         (!n.active||(n.cursor>=15&&n.cursor<=16&&n.weapon<8&&n.regs.s>=8))&&!(n.reflected&0x3FFF);
 }
 static int put(const uint8_t *in,int len) {

@@ -4,6 +4,7 @@
 #include "mm1_proto_video.h"
 #include "mm1_reflect.h"
 #include "mm1_slide.h"
+#include "mm1_coop.h"
 #include "cyc_core.h"
 #include "cyc_mod.h"
 #include "cyc_render.h"
@@ -26,14 +27,15 @@ typedef struct {
     uint8_t on,mode,selected,teleport,previous,pending,invulnerability,dispatched;
     uint64_t swaps,damage_hits,shot_limit;
 } ProtoState;
-static ProtoState state;
+static ProtoState states[2];
+#define state (states[mm1_coop_seat()])
 /* Renderer and dispatcher own their current page; immutable atlas stays here. */
 void mm1_video_character_changed(void);
 void mm1_controls_refresh(void);
 int mm1_controls_safe(void);
 
 int mm1_proto_available(void){return enabled;}
-int mm1_proto_selected(void){return enabled&&state.selected;}
+int mm1_proto_selected(void){return enabled&&(mm1_coop_available()?mm1_coop_character():state.selected);}
 int mm1_proto_teleporting(void){return enabled&&state.teleport;}
 int mm1_proto_real_traits(void){return mm1_proto_selected()&&real_mode;}
 const CycProtoAtlas *mm1_proto_atlas(void){return loaded?&atlas:NULL;}
@@ -61,12 +63,13 @@ static void set_enabled(int on) {
     mm1_reflect_configure(enabled&&real_mode);
     mm1_controls_refresh();mm1_video_character_changed();
 }
-void mm1_proto_stage_enter(void){state.teleport=state.pending=state.previous=0;mm1_reflect_stage_enter();}
+void mm1_proto_coop_enable(void){set_enabled(1);}
+void mm1_proto_stage_enter(void){for(int i=0;i<2;i++)states[i].teleport=states[i].pending=states[i].previous=0;mm1_reflect_stage_enter();}
 static void sound(uint8_t track) {
     int n=R(0x45);if(n<16){W(0x580+n,track);W(0x45,n+1);}
 }
 int mm1_proto_dispatch(void) {
-    if(!enabled)return 0;
+    if(!enabled||mm1_coop_available())return 0;
     unsigned fresh=state.pending;state.pending=0;
     if(fresh && !state.teleport && playable() && mm1_slide_cancel_for_switch()) {
         state.teleport=1;state.invulnerability=R(0x55);state.swaps++;
@@ -115,7 +118,7 @@ static int muzzle(uint16_t address) {
 }
 static void input(void *ctx,uint8_t buttons[2]) {
     (void)ctx;
-    if(!enabled)return;
+    if(!enabled||mm1_coop_available())return;
     unsigned select=(nes_input_seat(1)&0x20)!=0;
     if(!playable()||state.teleport||(buttons[0]&0x10))state.pending=0;
     else state.pending|=(uint8_t)(select&&!state.previous);
@@ -143,7 +146,7 @@ static void end(void *ctx) {
     }
 }
 static void power_on(void *ctx) {
-    (void)ctx;memset(&state,0,sizeof state);state.selected=(uint8_t)start_proto;
+    (void)ctx;memset(states,0,sizeof states);states[0].selected=(uint8_t)start_proto;states[1].selected=(uint8_t)!start_proto;
     mm1_proto_video_reset();
     mm1_reflect_reset();
 }
@@ -194,22 +197,23 @@ uint32_t mm1_proto_color(unsigned index) {
     return c;
 }
 static int get(uint8_t *out,int cap) {
-    if(cap<(int)sizeof state)return -1;
-    memcpy(state.magic,"MP01",4);state.on=(uint8_t)enabled;state.mode=(uint8_t)real_mode;
-    memcpy(out,&state,sizeof state);return sizeof state;
+    if(cap<(int)sizeof states)return -1;
+    for(int i=0;i<2;i++){memcpy(states[i].magic,"MP02",4);states[i].on=(uint8_t)enabled;states[i].mode=(uint8_t)real_mode;}
+    memcpy(out,states,sizeof states);return sizeof states;
 }
 static int valid(const uint8_t *in,int len) {
     if(!len)return !enabled;
-    if(!in || len!=sizeof state)return 0;
-    ProtoState next;memcpy(&next,in,sizeof next);
-    return !memcmp(next.magic,"MP01",4)&&next.on==enabled&&next.mode==real_mode&&
-        next.selected<=1&&next.teleport<=32&&next.previous<=1&&next.pending<=1&&next.dispatched<=1;
+    if(!in || len!=sizeof states)return 0;
+    ProtoState next[2];memcpy(next,in,sizeof next);
+    for(int i=0;i<2;i++)if(memcmp(next[i].magic,"MP02",4)||next[i].on!=enabled||next[i].mode!=real_mode||
+        next[i].selected>1||next[i].teleport>32||next[i].previous>1||next[i].pending>1||next[i].dispatched>1)return 0;
+    return 1;
 }
 static int put(const uint8_t *in,int len) {
     if(!valid(in,len))return 0;
-    memset(&state,0,sizeof state);if(len)memcpy(&state,in,sizeof state);return 1;
+    memset(states,0,sizeof states);if(len)memcpy(states,in,sizeof states);return 1;
 }
-static int pose_done(uint16_t address){(void)address;mm1_proto_pose_done();return 0;}
+static int pose_done(uint16_t address){(void)address;if(!mm1_coop_drawing())mm1_proto_pose_done();return 0;}
 static void reset(void){set_enabled(0);real_mode=1;start_proto=1;}
 static void activate(void) {
     char value[32]="protoman";

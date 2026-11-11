@@ -217,3 +217,8 @@ bytes = "A9 FE 20 77 C4 A9 FF 20"
 id = "mm1.slide.stage-clear"
 addr = 0xC05A
 bytes = "A9 00 85 3E A9 FE 20 77"
+
+[[mod_function_hook]]
+id = "mm1.coop.death"
+addr = 0xC219
+bytes = "A9 FE 20 77 C4 A9 FF 20"

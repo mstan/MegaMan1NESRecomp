@@ -1,6 +1,7 @@
 /* MM4 slide steering around MM1's original movement, collision and camera. */
 #include "mm1_slide.h"
 #include "mm1_proto.h"
+#include "mm1_coop.h"
 #include "cyc_mod.h"
 #include "cyc_ring.h"
 #include "cyc_mm4_donor.h"
@@ -16,7 +17,8 @@ typedef struct {
     uint16_t before_x,dust_x;uint8_t dust_y,inputs_open,held,fresh,old,pad;
     uint64_t starts,timed,walls,falls,jumps,reversals,blocked,hits;
 } Slide;
-static Slide S;
+static Slide slides[2];
+#define S (slides[mm1_coop_seat()])
 static int enabled,loaded;
 static Mm1SlidePose poses[3];
 static uint8_t palettes[2][4],dust_tiles[3][16];
@@ -63,6 +65,7 @@ static int load_art(void) {
 /* Use the current room's real decoder, including mutable active blocks. */
 static int probe(int x,int y) {
     if(x<0||x>=0x3000||y<0||y>=240)return 1;
+    if(cyc_mod_isolated())return mm1_world_probe(x,y);
     CycModRegs r;cyc_mod_regs(&r);if(!cyc_mod_isolate_begin())return -1;
     W(0x2F,0);W(0x0C,x>>8);W(0x0D,x);W(0x0E,y);
     int ok=cyc_mod_call(0xC39C,&r)&&cyc_mod_call(0xCCB7,&r),result=ok?r.a:-1;
@@ -131,6 +134,7 @@ static int after(uint16_t address) {
     else if(wall||!S.timer)S.blocked++;
     return 0;
 }
+void mm1_slide_after_run(void){after(0);}
 static int speed(uint16_t address) {
     (void)address;if(S.active&&!S.hurt){CycModRegs r;cyc_mod_regs(&r);if(!r.x){r.a=0x82;r.p=(uint8_t)((r.p&~0x82)|0x80);cyc_mod_set_regs(&r);}}return 0;
 }
@@ -160,24 +164,27 @@ static void set_enabled(int on) {
     for(int i=0;i<10;i++)nes_mod_set_function_hook_enabled(hooks[i],enabled);
     mm1_controls_refresh();mm1_video_character_changed();
 }
-static void power_on(void *ctx){(void)ctx;memset(&S,0,sizeof S);}
+static void power_on(void *ctx){(void)ctx;memset(slides,0,sizeof slides);}
 static void frame_end(void *ctx) {
-    (void)ctx;if(S.dust&&++S.dust_age>=26)S.dust=0;
+    (void)ctx;for(int i=0;i<2;i++)if(slides[i].dust&&++slides[i].dust_age>=26)slides[i].dust=0;
     if(report)fprintf(report,"{\"frame\":%llu,\"active\":%u,\"timer\":%u,\"hurt\":%u,\"x\":%d,\"y\":%u,\"starts\":%llu,\"timed\":%llu,\"walls\":%llu,\"falls\":%llu,\"jumps\":%llu,\"reverse\":%llu,\"blocked\":%llu}\n",
         (unsigned long long)cyc_ring_frame,S.active,S.timer,S.hurt,player_x(),R(0x600),
         (unsigned long long)S.starts,(unsigned long long)S.timed,(unsigned long long)S.walls,
         (unsigned long long)S.falls,(unsigned long long)S.jumps,(unsigned long long)S.reversals,(unsigned long long)S.blocked);
 }
 static int get(uint8_t *out,int cap) {
-    if(cap<(int)sizeof S)return -1;memcpy(S.magic,"MS01",4);S.on=(uint8_t)enabled;memcpy(out,&S,sizeof S);return sizeof S;
+    if(cap<(int)sizeof slides)return -1;
+    for(int i=0;i<2;i++){memcpy(slides[i].magic,"MS02",4);slides[i].on=(uint8_t)enabled;}
+    memcpy(out,slides,sizeof slides);return sizeof slides;
 }
 static int valid(const uint8_t *in,int len) {
-    if(!len)return !enabled;if(!in||len!=sizeof S)return 0;Slide n;memcpy(&n,in,sizeof n);
-    return !memcmp(n.magic,"MS01",4)&&n.on==enabled&&n.active<=1&&n.timer<=26&&n.right<=1&&
-        n.stamp<=1&&n.hurt<=27&&n.hurt_age<=27&&n.dust<=1&&n.dust_age<=26&&n.dust_right<=1&&n.inputs_open<=1;
+    if(!len)return !enabled;if(!in||len!=sizeof slides)return 0;Slide records[2];memcpy(records,in,sizeof records);
+    for(int i=0;i<2;i++){Slide *n=&records[i];if(memcmp(n->magic,"MS02",4)||n->on!=enabled||n->active>1||
+        n->timer>26||n->right>1||n->stamp>1||n->hurt>27||n->hurt_age>27||n->dust>1||n->dust_age>26||
+        n->dust_right>1||n->inputs_open>1)return 0;}return 1;
 }
 static int put(const uint8_t *in,int len) {
-    if(!valid(in,len))return 0;memset(&S,0,sizeof S);if(len)memcpy(&S,in,sizeof S);return 1;
+    if(!valid(in,len))return 0;memset(slides,0,sizeof slides);if(len)memcpy(slides,in,sizeof slides);return 1;
 }
 static void reset(void){set_enabled(0);}
 static void activate(void){if(mm1_mm4_load("slide")){loaded=load_art();set_enabled(1);}}

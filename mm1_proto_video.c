@@ -21,14 +21,17 @@ typedef struct {
 } BodyFrame;
 typedef struct {uint64_t mask;int16_t x,y;uint8_t sprite,right,replace,pad;uint8_t oam[256];} ShotFrame;
 typedef struct {int16_t x,y;uint8_t on,right,age,pad;} DustFrame;
+typedef struct {uint8_t on,x,y,pad;} PortraitFrame;
 typedef struct {
     BodyFrame building,shown;ShotFrame building_shot[3],shown_shot[3];uint8_t page[256];
     DustFrame building_dust,shown_dust;
+    PortraitFrame portrait;
     uint8_t restoring,invulnerability;
 } Presentation;
 static Presentation video;
 static int valid_picture(void);
 static int valid_shot(int actor);
+static int valid_portrait(void);
 int mm1_controls_menu(void);
 void mm1_proto_video_reset(void){memset(&video,0,sizeof video);}
 void mm1_proto_video_debug(char *out,int cap) {
@@ -107,6 +110,16 @@ void mm1_proto_draw_latch(void) {
     memcpy(video.shown_shot,video.building_shot,sizeof video.shown_shot);
     video.shown_dust=video.building_dust;
     for(int k=0;k<256;k++)video.page[k]=R(0x200+k);
+    /* The retail inventory writes its four face sprites directly. Keep its
+     * exact 16x16 grid, X scroll correction and surrounding life digits. */
+    PortraitFrame *p=&video.portrait;memset(p,0,sizeof *p);
+    if(mm1_proto_selected()&&mm1_controls_menu()) {
+        static const uint8_t tiles[]={0xED,0xED,0xEE,0xEE},attrs[]={0,64,1,65};
+        int x=R(0x2EB),ok=1;
+        for(int i=0;i<4;i++)if(R(0x2E8+i*4)!=160+(i/2)*8||R(0x2E9+i*4)!=tiles[i]||
+            R(0x2EA+i*4)!=attrs[i]||R(0x2EB+i*4)!=x+(i&1)*8)ok=0;
+        if(ok){p->on=1;p->x=(uint8_t)x;p->y=161;}
+    }
     for(int slot=0;slot<64;slot++)if(video.shown.mask&(1ull<<slot))
         for(int k=0;k<4;k++)if(video.shown.oam[slot*4+k]!=R(0x200+slot*4+k)){
             video.shown.mask=0;return;
@@ -131,9 +144,14 @@ static int valid_shot(int actor) {
         if(memcmp(f->oam+slot*4,oam+slot*4,4))return 0;
     return 1;
 }
+static int valid_portrait(void) {
+    return video.portrait.on&&mm1_proto_available()&&mm1_proto_atlas()&&
+        !memcmp(video.page,cyc_render_oam(),256);
+}
 int mm1_proto_owns_slot(int slot) {
     if(slot<0||slot>=64)return 0;
     if(valid_picture()&&(video.shown.mask&(1ull<<slot)))return 1;
+    if(valid_portrait()&&slot>=58&&slot<=61)return 1;
     for(int i=2;i<5;i++)if(valid_shot(i)&&(video.shown_shot[i-2].mask&(1ull<<slot)))return 1;
     return 0;
 }
@@ -150,6 +168,14 @@ static uint32_t color(unsigned index,int weapon,int proto,int flash) {
 static int pixel_visible(int width,int nx,int y) {
     return (cyc_render_line_mask(y)&16)&&
         (width!=256||nx<0||nx>=8||(cyc_render_line_mask(y)&4));
+}
+static void paint_portrait(uint32_t *out,int width,int x0) {
+    if(!valid_portrait())return;
+    PortraitFrame *p=&video.portrait;const uint32_t *art=mm1_proto_atlas()->portrait;
+    for(int row=0;row<16;row++)for(int col=0;col<16;col++) {
+        int nx=p->x+col,x=nx+x0,y=p->y+row;uint32_t color=art[row*16+col];
+        if(color&&x>=0&&x<width&&y<240&&pixel_visible(width,nx,y))out[y*width+x]=color;
+    }
 }
 /* Donor tiles stay immutable host data; no native CHR slots are borrowed. */
 static void paint_tile(uint32_t *out,int width,int x0,const uint8_t *coverage,
@@ -223,6 +249,7 @@ void mm1_video_paint_actor(uint32_t *out,int width,int x0,const uint8_t *coverag
     if(!actor)mm1_proto_paint(out,width,x0,coverage);else paint_shot(out,width,x0,coverage,actor);
 }
 void mm1_video_paint_slot(uint32_t *out,int width,int x0,const uint8_t *coverage,int slot) {
+    if(slot==58)paint_portrait(out,width,x0);
     if(valid_picture()&&first_slot(video.shown.mask)==slot)mm1_proto_paint(out,width,x0,coverage);
     for(int i=2;i<5;i++)if(valid_shot(i)&&first_slot(video.shown_shot[i-2].mask)==slot)
         paint_shot(out,width,x0,coverage,i);
@@ -234,7 +261,7 @@ static int place(int slot,int x,int y,int *out_x,void *context) {
     return 0;
 }
 int mm1_proto_native_picture(uint32_t *out) {
-    int any=valid_picture()||mm1_video_dust_visible();for(int i=2;i<5;i++)any|=valid_shot(i);
+    int any=valid_picture()||mm1_video_dust_visible()||valid_portrait();for(int i=2;i<5;i++)any|=valid_shot(i);
     if(!any||!cyc_render_background(out))return 0;
     mm1_video_paint_dust(out,256,0,cyc_frame_bg_opaque());
     Paint p={out,0};cyc_render_sprites(out,256,240,0,cyc_frame_bg_opaque(),place,&p);
@@ -252,7 +279,7 @@ int mm1_video_state_valid(const uint8_t *in,int len) {
         v.building.right>1||v.shown.right>1||v.building.replace>1||v.shown.replace>1||
         v.building.slide>1||v.shown.slide>1||v.building.donor_pose>2||v.shown.donor_pose>2||
         v.building_dust.on>1||v.shown_dust.on>1||v.building_dust.right>1||v.shown_dust.right>1||
-        v.building_dust.age>26||v.shown_dust.age>26)return 0;
+        v.building_dust.age>26||v.shown_dust.age>26||v.portrait.on>1)return 0;
     for(int i=0;i<3;i++)if(v.building_shot[i].sprite>=7||v.shown_shot[i].sprite>=7||
         v.building_shot[i].right>1||v.shown_shot[i].right>1||
         v.building_shot[i].replace>1||v.shown_shot[i].replace>1)return 0;

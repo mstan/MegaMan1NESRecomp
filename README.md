@@ -16,6 +16,8 @@ front shield with reflected native projectiles, two uncharged shots and double
 incoming damage. Its normal-stat reskin option retains Mega Man's behavior.
 Current checks cover native/interpreter agreement, Fit sprite placement,
 current-build state replay and native enemy/boss collision paths.
+The native inventory keeps its panel geometry and life count with the selected
+character's 16x16 portrait.
 
 The optional slide and charged Buster read graphics, timing and sounds from your
 Mega Man 4 (USA) ROM at launch. Both characters share these abilities. Down + A
@@ -24,14 +26,13 @@ Half shots use normal Buster damage; full shots triple it and continue through
 lethal enemy hits.
 The donor image and its artwork are never written into the package. Charging,
 active-shot state/audio replay, slide movement/ceilings/contact and native
-damage paths have targeted checks. Character-specific inventory art and
-multiplayer parity remain under development.
+damage paths have targeted checks. Multiplayer parity remains under development.
 
 ## Cycle backend migration branch
 
 Default cycle controls: arrows move, Z is A, X is B, Enter is Start and
-Backslash is Select. Escape opens the menu, Tab fast-forwards, and F8/F9
-save/load the cycle state. Use Controls to remap inputs in `config.ini`.
+Backslash is Select. Escape or both controller sticks opens the system menu;
+Tab fast-forwards. Use Controls to remap inputs in `config.ini`.
 Older `keybinds.ini` and F5/F6/F7 instructions below apply to the legacy host.
 
 The normal build now uses the cycle CPU backend. Code is generated from the

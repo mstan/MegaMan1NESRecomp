@@ -15,12 +15,12 @@ static unsigned wrapped_oam,hud_oam;
 static int game_camera(void) {return R(0x1A)|(R(0x1B)<<8);}
 static int actor_x(int slot) {return R(0x480+slot)|(R(0x460+slot)<<8);}
 static int game_valid(void) {
-    return R(0x31)<10 && R(0x54)==32 && R(0x600)<248 && R(0x28)>=R(0x27) &&
+    return R(0x31)<10 && mm1_coop_total()==32 && mm1_coop_read(mm1_coop_anchor(),0x600)<248 && R(0x28)>=R(0x27) &&
            R(0x28)<48 && R(0x1B)>=R(0x27) && R(0x1B)<=R(0x28) &&
            !R(0x1E) && !(R(0x26)&1);
 }
 static int game_world_y(int y) {return y;}
-static int game_present_valid(void) {return game_valid() && R(0x42)==5;}
+static int game_present_valid(void) {return game_valid() && (R(0x42)==5||mm1_coop_inflight());}
 static uint8_t game_chr(uint16_t addr) {return cyc_render_chr(addr);}
 static void game_frame_end(void) {
     if(!game_valid()){ws.activation_scene=UINT32_MAX;return;}
@@ -197,8 +197,10 @@ static int hook(uint16_t addr) {
         if(addr==MM_EMIT){CycModRegs r={0};cyc_mod_regs(&r);mm1_proto_part_emitted(r.x/4+1);}
         return 0;
     }
-    if(addr==MM_DMA0){mm1_proto_draw_latch();mm1_coop_video_latch();if(enabled)dma_packet();return 0;}
+    if(addr==MM_DMA0){int previous=mm1_coop_present_begin();mm1_proto_draw_latch();mm1_coop_video_latch();
+        mm1_coop_present_end(previous);if(enabled)dma_packet();return 0;}
     if(addr==MM_BUILD){
+        mm1_coop_draw_begin();
         mm1_coop_primary_begin();
         mm1_slide_restore_input();
         mm1_proto_draw_begin();

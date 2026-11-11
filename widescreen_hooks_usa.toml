@@ -227,3 +227,48 @@ bytes = "A9 FE 20 77 C4 A9 FF 20"
 id = "mm1.coop.draw-part"
 addr = 0xD293
 bytes = "A4 0D E8 E8 E8 E8 E0 FC"
+
+[[mod_function_hook]]
+id = "mm1.coop.step"
+addr = 0x98F2
+bank = 5
+bytes = "A6 2F BD 00 06 C9 F8 D0"
+
+[[mod_function_hook]]
+id = "mm1.coop.next"
+addr = 0x998A
+bank = 5
+bytes = "E6 2F A5 54 C5 2F F0 03"
+
+[[mod_function_hook]]
+id = "mm1.coop.return"
+addr = 0xC3BE
+bytes = "60 A9 06 85 42 8D 06 C0"
+
+[[mod_function_hook]]
+id = "mm1.coop.weapon-begin"
+addr = 0xA277
+bank = 5
+bytes = "A5 5F 0A A8 B9 88 A2 85"
+
+[[mod_function_hook]]
+id = "mm1.coop.weapon-end"
+addr = 0x91B9
+bank = 5
+bytes = "20 EA 98 20 96 D8 20 31"
+
+[[mod_function_hook]]
+id = "mm1.coop.boss-killed"
+addr = 0xCA2D
+bytes = "A9 20 20 16 D1 A9 01 85"
+
+[[mod_function_hook]]
+id = "mm1.coop.stage-clear"
+addr = 0xC05A
+bytes = "A9 00 85 3E A9 FE 20 77"
+
+[[mod_function_hook]]
+id = "mm1.coop.refill"
+addr = 0x915E
+bank = 5
+bytes = "A5 AD F0 03 20 53 94 A5"

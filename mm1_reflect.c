@@ -12,9 +12,9 @@
 #define W(a,v) cyc_mod_poke((uint16_t)(a),(uint8_t)(v))
 typedef struct {
     char magic[4];
-    uint8_t enabled,active,cursor,owner,weapon,reference,scratch[14],probe_done,pad;
+    uint8_t enabled,active,cursor,owner,weapon,reference,scratch[14],probe_done,total;
     CycModRegs regs;
-    uint16_t reflected,before_hits;
+    uint16_t reflected,before_hits,parent_return;
     uint32_t buster_hits;
     uint64_t blocks,reflections,passes,boss_kills;
 } Reflection;
@@ -25,12 +25,12 @@ static const char *hooks[]={"mm1.proto.shield","mm1.proto.reflected-pass","mm1.p
 static void refresh(void) {
     for(int i=0;i<6;i++)nes_mod_set_function_hook_enabled(hooks[i],enabled||S.active);
 }
-int mm1_weapon_identity(void){return S.active?S.weapon:R(0x5F);}
+int mm1_weapon_identity(void){return S.active&&S.owner==mm1_coop_seat()?S.weapon:R(0x5F);}
 int mm1_reflect_busy(void){return S.active!=0;}
 void mm1_reflect_configure(int on){enabled=on!=0;refresh();}
 void mm1_reflect_reset(void){memset(&S,0,sizeof S);refresh();}
 void mm1_reflect_stage_enter(void) {
-    if(S.active){W(0x5F,S.weapon);W(0x2F,S.reference);}
+    if(S.active){W(0x5F,S.weapon);W(0x2F,S.reference);W(0x54,S.total);}
     S.active=S.cursor=0;S.reflected=0;S.buster_hits=0;refresh();
 }
 static int field(int i,int slot){return(i<8?0x400+i*32:0x600+(i-8)*32)+slot;}
@@ -66,23 +66,27 @@ static int native_pass(uint16_t address) {
     if(S.active) {
         /* Only our exact native RTS continuation may finish this scope. */
         unsigned ret=R(0x100|(uint8_t)(r.s+1))|(R(0x100|(uint8_t)(r.s+2))<<8);
-        if(r.s!=S.regs.s||ret!=0x91BB)return 0;
+        if(r.s!=S.regs.s||ret!=S.parent_return)return 0;
+        mm1_coop_record_hits(S.owner,S.before_hits,hit_flags());
         S.buster_hits|=(uint32_t)(hit_flags()&~S.before_hits)<<16;
-        W(0x5F,S.weapon);W(0x2F,S.reference);
+        W(0x5F,S.weapon);W(0x2F,S.reference);W(0x54,S.total);
         for(int i=0;i<14;i++)W(i,S.scratch[i]);
         cyc_mod_set_regs(&S.regs);r=S.regs;
     } else {
         unsigned ret=R(0x100|(uint8_t)(r.s+1))|(R(0x100|(uint8_t)(r.s+2))<<8);
         uint16_t live=0;for(int i=14;i<16;i++)if(R(0x600+i)<248&&R(0x400+i)==0x1A)live|=(uint16_t)(1u<<i);
-        if(!enabled||!live||ret!=0x91BB||r.s<8)return 0;
+        int caller=ret==0x91BB||(ret==0xC3BD&&mm1_coop_native_pool());
+        if(!enabled||!live||!caller||r.s<8||cyc_mod_isolated())return 0;
         S.reflected=live;S.regs=r;S.weapon=R(0x5F);S.reference=R(0x2F);S.owner=(uint8_t)mm1_coop_seat();S.cursor=14;
+        S.parent_return=(uint16_t)ret;
+        S.total=R(0x54);
         for(int i=0;i<14;i++)S.scratch[i]=R(i);
     }
     int shot=S.cursor;
     while(shot<16&&(!(S.reflected&(1u<<shot))||R(0x600+shot)>=248))shot++;
     if(shot==16){S.active=0;S.cursor=0;refresh();return 0;}
     S.active=1;S.cursor=(uint8_t)(shot+1);S.before_hits=hit_flags();
-    W(0x5F,0);W(0x2F,shot);
+    W(0x5F,0);W(0x2F,shot);W(0x54,mm1_coop_total());
     /* The hook is an actual JSR target. Its handled RTS enters the native
      * collision routine, whose real RTS comes back to this entry. The original
      * caller stays underneath. Hardware and NMIs continue normally throughout. */
@@ -126,7 +130,8 @@ static int valid(const uint8_t *in,int len) {
     if(!len)return !enabled;if(!in||len!=sizeof S)return 0;
     Reflection n;memcpy(&n,in,sizeof n);
     return !memcmp(n.magic,"MR01",4)&&n.enabled==enabled&&n.active<=1&&n.owner<=1&&n.probe_done<=1&&
-        (!n.active||(n.cursor>=15&&n.cursor<=16&&n.weapon<8&&n.regs.s>=8))&&!(n.reflected&0x3FFF);
+        (!n.active||(n.cursor>=15&&n.cursor<=16&&n.weapon<8&&n.regs.s>=8&&
+            (n.parent_return==0x91BB||n.parent_return==0xC3BD)&&(n.total==16||n.total==32)))&&!(n.reflected&0x3FFF);
 }
 static int put(const uint8_t *in,int len) {
     if(!valid(in,len))return 0;memset(&S,0,sizeof S);if(len)memcpy(&S,in,sizeof S);refresh();return 1;

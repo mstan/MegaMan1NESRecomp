@@ -3,6 +3,16 @@
 #include <stdint.h>
 int mm1_coop_available(void);
 int mm1_coop_seat(void);
+int mm1_coop_anchor(void);
+int mm1_coop_present_begin(void);
+void mm1_coop_present_end(int previous);
+void mm1_coop_draw_begin(void);
+void mm1_coop_frame_begin(void);
+int mm1_coop_native_pool(void);
+int mm1_coop_total(void);
+int mm1_coop_inflight(void);
+int mm1_coop_controls_paused(void);
+void mm1_coop_record_hits(int owner,uint16_t before,uint16_t after);
 int mm1_coop_character(void);
 int mm1_coop_dispatch(void);
 int mm1_coop_read(int seat,uint16_t address);

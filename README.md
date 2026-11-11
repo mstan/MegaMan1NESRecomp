@@ -32,10 +32,13 @@ The development `--coop on` slice separates personal movement, equipment state
 and native actors while the original frame loop advances the world once.
 `--coop-p1 megaman|protoman` chooses the complementary character roster.
 Each character uses its own native parts, colors, slide and charged shots.
-Targeted checks cover movement, both native sprite priority orders and exact
-current-build charge/shot replay, including audio. Multiplayer
-combat, lifecycle, personal menus, independent views and online play are still
-being implemented; the Co-op package is not exposed in the Mods catalog yet.
+Targeted checks cover movement, native enemy/boss damage and defeat, personal
+health/weapon refills and shared extra lives. Both sprite priority orders also
+work while the main character blinks. Current-build charge/shot and native NMI
+continuations replay exactly, including audio, with Fit margins retained.
+Full multiplayer lifecycle, personal menus, independent views and online play
+are still being implemented; the Co-op package is not exposed in the Mods
+catalog yet.
 
 ## Cycle backend migration branch
 

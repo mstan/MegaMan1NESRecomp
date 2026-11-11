@@ -37,11 +37,14 @@ def main():
         flat.append(f'1495 POKE {address:04X} {value:02X}')
     for slot in range(16,32):flat.append(f'1497 POKE {0x600+slot:04X} F8')
     # Let the actual landing and the OAM/DMA pipeline settle after positioning.
-    pose=pokes(1495,{0x480:64,0x460:0,0x600:180,0x420:64,0x400:0,0x440:0,0x640:0,0x680:0,0x660:0,0x4A0:0,0x620:0,0x55:0x81})
+    pose=pokes(1495,{0x480:64,0x460:0,0x600:180,0x420:64,0x400:0,0x440:0,0x640:0,0x680:0,0x660:0,0x4A0:0,0x620:0,0x55:0})
     reference,_,_=run('native-mega',flat,1500,('--coop-p1','protoman',*pose,
         '--save-state',f'1499:{a.out/"native-mega.cycstate"}'))
     assert reference[1500]['x']==[32,64] and reference[1500]['y']==[180,180],reference[1500]
     _,_,native=pixels(a.out/'native-mega-native.png');_,_,presented=pixels(a.out/'native-mega.png')
+    # This flat gray background is disjoint from both sprite palettes, so
+    # background subtraction keeps their opaque black outlines and eyes.
+    assert {native[y][x*3:x*3+3] for y in range(165,192) for x in range(48,80)}=={bytes((174,174,174))}
     # Use the same world coordinates: native background tiles differ even
     # between adjacent body-sized rectangles in this room.
     solo=[s.replace('0480 20','0480 40') for s in flat]
@@ -92,7 +95,7 @@ def main():
         if frame!=1500:
             run(f'native-mega-{frame}',flat,frame,('--coop-p1','protoman',*pose))
             _,_,presented=pixels(a.out/f'native-mega-{frame}.png')
-        name=f'priority-{frame}';values={0x412:255,0x432:2,0x452:0,0x472:0,0x492:64,0x4B2:0,
+        name=f'priority-{frame}';values={0x412:255,0x432:0,0x452:0,0x472:0,0x492:64,0x4B2:0,
             0x4D2:0,0x4F2:0,0x612:180,0x632:0,0x652:127,0x672:0,0x692:0,0x6B2:1,0x6D2:1,0x6F2:0x41}
         overlap=flat+[f'1498 HOLD {address:04X} {value:02X}' for address,value in values.items()]
         run(name,overlap,frame,('--coop-p1','protoman',*pose))
@@ -106,18 +109,29 @@ def main():
                 if 48<=x<80:item.append(slot)
         assert player and item,(player,item)
         front=min(item)<min(player);orders.add(front)
-        for y in range(165,192):
-            for x in range(48,80):
-                bg=native[y][x*3:x*3+3];guest=presented[y][x*3:x*3+3];npc=raw[y][x*3:x*3+3]
-                conflicts+=guest!=bg and npc!=bg and guest!=npc
-                expected=npc if front and npc!=bg else guest if front else guest if guest!=bg else npc
-                assert actual[y][x*3:x*3+3]==expected,(frame,x,y,front,actual[y][x*3:x*3+3],expected)
+        def compare(label):
+            nonlocal conflicts
+            for y in range(165,192):
+                for x in range(48,80):
+                    bg=native[y][x*3:x*3+3];guest=presented[y][x*3:x*3+3];npc=raw[y][x*3:x*3+3]
+                    conflicts+=guest!=bg and npc!=bg and guest!=npc
+                    expected=npc if front and npc!=bg else guest if front else guest if guest!=bg else npc
+                    assert actual[y][x*3:x*3+3]==expected,(label,frame,x,y,front,actual[y][x*3:x*3+3],expected)
+        compare('body')
+        # With no emitted main body, its native last-used cursor is the only
+        # anchor. Check the adjacent world object on each side of that event.
+        name+= '-blink';blink=[s.replace('HOLD 0055 81','HOLD 0055 83') for s in overlap]
+        run(name,blink,frame,('--coop-p1','protoman',*pose))
+        _,_,raw=pixels(a.out/(name+'-native.png'));_,_,actual=pixels(a.out/(name+'.png'))
+        oam=(a.out/(name+'.frames')).read_bytes()[80:336]
+        assert not any(160<=oam[i*4]<192 and 16<=oam[i*4+3]<48 for i in range(64))
+        compare('blink')
     assert orders=={False,True} and conflicts>5,(orders,conflicts)
     ability=True if not a.priority_only else None
     summary=dict(result='pass',priority_only=a.priority_only,native_mega_pixels_exact=True,complementary_rosters=True,personal_lr=ability,
         both_guest_characters_share_slide_and_charge=ability,disabled_slide_preserves_native_jump=ability,
         guest_charge_and_shot_state_pcm_exact=ability,native_interpreter_exact=ability,
-        both_native_sprite_orders_exact=True,overlap_color_conflicts=conflicts)
+        both_native_sprite_orders_exact=True,blink_cursor_priority_exact=True,overlap_color_conflicts=conflicts)
     (a.out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary))
 
 if __name__=='__main__':main()

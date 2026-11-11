@@ -96,7 +96,7 @@ static void draw_tile(uint32_t *out,int width,int x0,int sx,int sy,int tile,int 
     }
 }
 
-static int render(uint32_t *out,int width,int height,int x0,const uint32_t *native,void *user) {
+static int render_inner(uint32_t *out,int width,int height,int x0,const uint32_t *native,void *user) {
     (void)user;(void)height;
     static uint32_t character[256*240];
     int replaced=mm1_proto_native_picture(character);
@@ -154,6 +154,10 @@ static int render(uint32_t *out,int width,int height,int x0,const uint32_t *nati
     }
     game_draw_native(out,width,x0);
     return 1;
+}
+static int render(uint32_t *out,int width,int height,int x0,const uint32_t *native,void *user) {
+    int previous=mm1_coop_present_begin();int result=render_inner(out,width,height,x0,native,user);
+    mm1_coop_present_end(previous);return result;
 }
 
 /* Diagnose the decoder against the PPU's actual background coverage, including

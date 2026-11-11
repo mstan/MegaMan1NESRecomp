@@ -8,6 +8,7 @@
 #include "mm1_charge.h"
 #include "mm1_slide.h"
 #include "mm1_coop.h"
+#include "mm1_weapon_gfx.h"
 #include "logical_input.h"
 #include "mod_runtime.h"
 #include "mod_function_hooks.h"
@@ -23,8 +24,9 @@ typedef struct { uint8_t magic[4],on,previous,pending,menu,ready,stage,pad[2];ui
 static WeaponState states[2];
 #define state (states[mm1_coop_seat()])
 static unsigned attempt_frame,attempt_reason,attempt_edge,attempt_owned,fresh_inputs;
-/* Native bank6 B50D/B515, expressed in its displayed inventory order. */
-static const uint8_t order[]={0,5,4,1,6,2,3,7};
+void mm1_video_character_changed(void);
+/* Native bank6 B51F is menu-index→weapon; B50D is its inverse. */
+static const uint8_t order[]={0,3,5,6,2,1,4,7};
 static const uint8_t mask[]={0,2,4,8,16,32,64,128};
 
 static int safe(void) {
@@ -32,6 +34,7 @@ static int safe(void) {
         !(R(0x420)&15) && !R(0x1E) && !R(0x26) && !R(0x41) && !R(0x95) && !R(0xAD) && !mm1_coop_controls_paused() && !state.menu;
 }
 int mm1_controls_safe(void){return safe();}
+int mm1_weapon_cycle_available(void){return enabled;}
 int mm1_controls_menu(void){return state.menu!=0;}
 int mm1_controls_gameplay(void) {
     return state.ready&&state.stage==R(0x31)&&R(0x31)<10&&R(0x54)==32&&R(0x600)<248&&
@@ -43,6 +46,7 @@ void mm1_controls_refresh(void) {
     nes_mod_set_function_hook_enabled("mm1.weapons.menu-enter",on);
     nes_mod_set_function_hook_enabled("mm1.weapons.menu-leave",on);
     nes_mod_set_function_hook_enabled("mm1.weapons.stage",on);
+    mm1_video_character_changed();
 }
 static void set_enabled(int on) {
 #ifdef MM1_PROFILE_USA
@@ -60,7 +64,7 @@ static int owned_sprite(int weapon,int sprite,int slot) {
     case 2:return slot==5 && sprite==0x5C;
     case 3:return slot>=2 && slot<14 && sprite==0x5D;
     case 4:return slot>=5 && slot<7 && (sprite==0x60 || sprite==0x61);
-    case 5:return slot>=5 && slot<12 && ((sprite>=0x62 && sprite<=0x66)||sprite==0x6A||sprite==0x6B);
+    case 5:return slot>=5 && slot<12 && ((sprite>=0x62 && sprite<=0x6B)||sprite==0x6D);
     case 6:return slot>=5 && slot<9 && (sprite==0 || sprite==0x6C || sprite==0x32);
     case 7:return slot>=5 && slot<10 && sprite==0x5E;
     default:return 0;
@@ -116,7 +120,7 @@ static void input(void *ctx,uint8_t buttons[2]) {
         else s->pending|=(uint8_t)fresh;s->previous=(uint8_t)held;
     }
 }
-static void power_on(void *ctx){(void)ctx;memset(states,0,sizeof states);}
+static void power_on(void *ctx){(void)ctx;memset(states,0,sizeof states);mm1_weapon_gfx_reset();}
 static void frame_end(void *ctx){
     (void)ctx;if(!safe())state.pending=0;
     if(report)fprintf(report,"{\"frame\":%llu,\"weapon\":%u,\"changes\":%llu,\"held\":%u,\"safe\":%d,\"hp\":%u,\"palette\":[%u,%u],\"pending\":%u,\"fresh_inputs\":%u,\"attempt\":[%u,%u,%u,%u]}\n",

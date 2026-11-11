@@ -184,7 +184,8 @@ static void enable(int on) {
 void mm1_video_character_changed(void) {
     int character=mm1_proto_available()||mm1_charge_available()||mm1_slide_available()||mm1_coop_available();
     for(size_t i=0;i<sizeof(hook_ids)/sizeof(hook_ids[0]);i++)
-        nes_mod_set_function_hook_enabled(hook_ids[i],enabled||(character&&(i==0||i==1||i==2||i==6)));
+        nes_mod_set_function_hook_enabled(hook_ids[i],enabled||(character&&(i==0||i==1||i==2||i==6))||
+            (mm1_weapon_cycle_available()&&(i==2||i==6)));
     cyc_render_capture_background(character!=0);
     cyc_render_set_stock_compositing(character!=0);
     cyc_render_set_compositor(enabled||character?render:NULL,NULL);

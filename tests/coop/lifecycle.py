@@ -55,7 +55,7 @@ def main():
         state=a.out/'handoff.cycstate'
         rows=run('handoff',0,extra=('--save-state',f'1499:{state}','--present-every','1499','--wav-out',str(a.out/'handoff.wav')))
         first=rows[1500];assert first['anchor']==1 and first['shown_owner']==0 and first['guest_owner']==1 and first['picture'],first
-        if a.palette_handoff:assert first['weapon'][1]==5,first
+        if a.palette_handoff:assert first['weapon'][1]==3,first
         run('reference',0,protect=True,stop=1500,extra=('--screenshot',str(a.out/'reference-native.png')))
         _,_,expected=pixels(a.out/'reference.png');_,_,actual=pixels(a.out/'handoff_01499.png');_,_,raw=pixels(a.out/'reference-native.png')
         assert all(expected[y][90*3:120*3]==actual[y][90*3:120*3] for y in range(160,192))

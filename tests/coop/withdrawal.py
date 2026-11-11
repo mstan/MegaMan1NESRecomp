@@ -39,7 +39,7 @@ def main():
     final=rows[1900];assert final['failures']==0 and final['withdrawals'][seat]==1 and final['rejoins'][seat]==1,final
     assert not final['withdrawn'] and final['teleport']==[0,0] and final['dead']==[0,0],final
     assert final['hp']==[20,24] and final['lives']==2 and [x[4] for x in final['ammo']]==[7,19],final
-    assert final['weapon'][seat]==5 and final['wipes']==0 and final['anchor']==(0 if seat==1 else 1),final
+    assert final['weapon'][seat]==3 and final['wipes']==0 and final['anchor']==(0 if seat==1 else 1),final
     run('interpreter',('--interp-only','--present-every','1665'));assert (a.out/'native.hash').read_bytes()==(a.out/'interpreter.hash').read_bytes()
     assert (a.out/'native.png').read_bytes()==(a.out/'interpreter.png').read_bytes()
     assert (a.out/'native_01665.png').read_bytes()==(a.out/'interpreter_01665.png').read_bytes()

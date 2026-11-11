@@ -19,17 +19,17 @@ def main():
     def press(frame,buttons,weapon,changes,release=1):
         route.append(f'{frame} X1:{buttons}');route.append(f'{frame+release} X1:-')
         expected[frame+4]=(weapon,changes)
-    press(710,'R',5,1);press(720,'R',0,2)
+    press(710,'R',3,1);press(720,'R',0,2)
     route.append('730 POKE 005D FE')
-    for i,weapon in enumerate((5,4,1,6,2,3,7,0)):press(730+i*10,'R',weapon,3+i)
+    for i,weapon in enumerate((3,5,6,2,1,4,7,0)):press(730+i*10,'R',weapon,3+i)
     route.append('815 POKE 0071 00')
     press(820,'L',7,11);press(830,'L+R',7,11)
     press(840,'R',0,12,release=10);expected[849]=(0,12)
     route+=['860 HOLD 0420 43','860 X1:L','870 UNHOLD 0420','870 POKE 0420 40']
     expected[865]=(0,12);expected[875]=(0,12)
-    route.append('880 X1:-');press(890,'R',5,13)
+    route.append('880 X1:-');press(890,'R',3,13)
     route+=['920 UNHOLD 006A','920 HOLD 006A 00','920 X1:R','930 X1:-']
-    expected[925]=(5,13)
+    expected[925]=(3,13)
     # Finish the original READY/arrival sequence before the isolated controls
     # fixture. These cheats do not skip boot, stage entry or its native script.
     offset=700
@@ -65,7 +65,7 @@ def main():
                  acquired_only=True,wrap=True,empty_weapon=True,simultaneous_ignored=True,
                  hold_once=True,hurt_press_discarded=True,zero_hp_press_discarded=True,
                  native_ready_press_discarded=True,
-                 inventory_cycle=[5,4,1,6,2,3,7,0])
+                 inventory_cycle=[3,5,6,2,1,4,7,0])
     (a.out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary))
 
 if __name__=='__main__':main()

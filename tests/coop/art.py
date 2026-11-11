@@ -53,7 +53,7 @@ def main():
     assert all(solo_pixels[y][52*3:76*3]==presented[y][52*3:76*3] for y in range(165,192)),'Native Mega pixels differ'
     if not a.priority_only:
         lr,_,_=run('personal-lr',boot+['1400 POKE 005D FE','1405 X2:R','1406 X2:-'],1430)
-        assert lr[1430]['weapon']==[0,5],lr[1430]
+        assert lr[1430]['weapon']==[0,3],lr[1430]
         donor=['--mm4-rom',str(a.donor.resolve())]
         slide_pose=pokes(1400,{0x480:104,0x460:0,0x600:180,0x420:0,0x400:0,0x440:0,0x640:0,0x680:0,0x660:0,0x4A0:0,0x620:0})
         slide=boot+['1420 2:DOWN+A+LEFT','1421 2:-']

@@ -4,6 +4,8 @@ The USA ROM supports adaptive Fit to screen and L/R weapon switching through
 the preloaded Mods catalog. Fit is enabled for a fresh profile. L/R follows the
 native inventory order, including empty weapons, and ignores unsafe transitions.
 Existing saved choices take precedence over the package defaults.
+Quick switching restores the original weapon's pattern graphics. Co-op players
+retain their own weapon patterns while the main player's graphics are displayed.
 
 The [widescreen implementation](WIDESCREEN.md) remains experimental. USA checks
 cover Cut Man terrain, wider enemy activation, native/interpreter agreement and

@@ -37,7 +37,7 @@ def main():
     rows={r['frame']:r for r in map(json.loads,(a.out/'native.jsonl').read_text().splitlines())}
     assert rows[1531]['phase']==2 and rows[1543]['phase']==3,(rows[1531],rows[1543])
     assert rows[1531]['owner']==rows[1543]['owner']==1 and rows[1600]['failures']==0
-    assert rows[1600]['weapon']==[5,4],rows[1600]
+    assert rows[1600]['weapon']==[5,6],rows[1600]
     def pcm(path):
         with wave.open(str(path),'rb') as f:return f.readframes(f.getnframes())
     original=pcm(a.out/'native.wav')

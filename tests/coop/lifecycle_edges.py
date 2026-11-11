@@ -76,7 +76,7 @@ def main():
     else:
         if a.case=='roof':assert rows[1670]['teleport'][1]==2 and rows[1670]['rejoins'][1]==0,rows[1670]
         else:assert rows[1670]['dead']==[1,0] and rows[1670]['teleport'][1] in (3,4),rows[1670]
-        assert final['rejoins'][1]==1 and final['hp'][1]==24 and final['weapon'][1]==5 and final['lives']==2 and final['wipes']==0,final
+        assert final['rejoins'][1]==1 and final['hp'][1]==24 and final['weapon'][1]==3 and final['lives']==2 and final['wipes']==0,final
         if a.case=='last-arriving':assert final['anchor']==1 and final['dead']==[1,0],final
         if a.case=='last-arriving':
             width,height,image=pixels(a.out/f'native_{snapshot:05d}.png')

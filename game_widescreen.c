@@ -3,6 +3,7 @@
 #define WS_PLAYFIELD_HEIGHT 240
 #define WS_SCROLL_PERIOD 512
 #define WS_PLUGIN "mm1.widescreen"
+#include "mm1_weapon_gfx.h"
 static const char *hook_ids[]={"mm1.widescreen.draw","mm1.widescreen.emit","mm1.widescreen.build","mm1.widescreen.cull","mm1.widescreen.minor_cull","mm1.widescreen.spawn","mm1.widescreen.dma0"};
 static const uint16_t hook_addrs[]={MM_DRAW,MM_EMIT,MM_BUILD,0x9951,0xBE81,MM_SPAWN,MM_DMA0};
 #include "widescreen_common.h"
@@ -197,12 +198,13 @@ static int hook(uint16_t addr) {
         if(addr==MM_EMIT){CycModRegs r={0};cyc_mod_regs(&r);mm1_proto_part_emitted(r.x/4+1);}
         return 0;
     }
-    if(addr==MM_DMA0){int previous=mm1_coop_dma_begin();mm1_proto_draw_latch();mm1_coop_video_latch();
+    if(addr==MM_DMA0){int previous=mm1_coop_dma_begin();mm1_weapon_gfx_latch();mm1_proto_draw_latch();mm1_coop_video_latch();
         mm1_coop_present_end(previous);if(enabled)dma_packet();return 0;}
     if(addr==MM_BUILD){
         mm1_coop_intro_draw();
         mm1_coop_draw_begin();
         mm1_coop_primary_begin();
+        mm1_weapon_gfx_begin();
         mm1_slide_restore_input();
         mm1_proto_draw_begin();
         ws.build.count=0;memset(ws.build_oam_kind,0,sizeof ws.build_oam_kind);draw_pending=0;return 0;

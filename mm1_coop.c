@@ -5,6 +5,7 @@
 #include "mm1_reflect.h"
 #include "mm1_charge.h"
 #include "mm1_slide.h"
+#include "mm1_weapon_gfx.h"
 #include "cyc_mod.h"
 #include "cyc_mm4_audio.h"
 #include "cyc_render.h"
@@ -167,7 +168,7 @@ static int private_call(uint16_t address,CycModRegs *regs,int limit,int hooks) {
                 p->height=(R(0xFF)&32)?16:8;
                 unsigned pattern=p->height==16?(o[1]&1)*0x1000+(o[1]&254)*16:
                     ((R(0xFF)&8)?0x1000:0)+o[1]*16;
-                for(int b=0;b<p->height*2;b++)p->pattern[b]=cyc_render_chr((uint16_t)(pattern+b));
+                for(int b=0;b<p->height*2;b++)p->pattern[b]=mm1_weapon_gfx_private((uint16_t)(pattern+b),cyc_render_chr((uint16_t)(pattern+b)));
                 for(int c=0;c<4;c++)p->palette[c]=R(0x3E0+(o[2]&3)*4+c)&63;
             }
         }

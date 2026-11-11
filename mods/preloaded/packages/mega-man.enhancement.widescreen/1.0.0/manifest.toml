@@ -1,0 +1,57 @@
+format_version = 1
+id = "mega-man.enhancement.widescreen"
+version = "1.0.0"
+name = "Mega Man Adaptive Widescreen (Experimental)"
+author = "NESRecomp"
+description = "Experimental Europe-ROM terrain reveal. Margin combat and scene transitions remain incomplete."
+license = "PolyForm-Noncommercial-1.0.0"
+resolver = "declarative"
+save_compatibility = "custom"
+
+[[target]]
+game_id = "mega-man-europe"
+rom_crc32 = "94476a70"
+
+[[feature]]
+id = "widescreen"
+name = "Adaptive Widescreen (Experimental)"
+description = "Show more of horizontal stages. Combat outside the original view is incomplete; some scenes fall back to 4:3. Wider activation changes enemy timing and difficulty."
+group = "Display"
+exclusive_group = "display-mode"
+default_enabled = false
+
+[[plugin]]
+feature = "widescreen"
+id = "mm1.widescreen"
+
+[[option]]
+feature = "widescreen"
+id = "aspect"
+label = "Aspect"
+type = "choice"
+default = "fit"
+[[option.choice]]
+value = "fit"
+label = "Fit window (adaptive)"
+[[option.choice]]
+value = "16-9"
+label = "16:9"
+[[option.choice]]
+value = "21-9"
+label = "21:9"
+[[option.choice]]
+value = "32-9"
+label = "32:9"
+
+[[option]]
+feature = "widescreen"
+id = "enemy_activation"
+label = "Enemy activation"
+type = "choice"
+default = "viewport"
+[[option.choice]]
+value = "viewport"
+label = "Load and keep enemies throughout the wide view"
+[[option.choice]]
+value = "classic"
+label = "Original spawning and culling"

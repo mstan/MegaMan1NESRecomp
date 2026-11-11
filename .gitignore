@@ -1,0 +1,24 @@
+/build/
+/build_*/
+/generated/
+/generation*_probe/
+/*_auto_entries.csv
+/*_finder_audit.csv
+/auto_entries.csv
+/finder_audit.csv
+/dispatch_misses.log
+/*.log
+/*.json
+/*.nes
+/*.NES
+/*.png
+!/game.toml
+
+cycle-evidence/
+build-cycle/
+build-legacy/
+/release/
+build-wide/
+build-wide-fix/
+wide-evidence/
+Play Widescreen.lnk

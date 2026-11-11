@@ -1,0 +1,3 @@
+WAIT 600
+SCREENSHOT F:\Projects\nesrecomp\MegamanNESRecomp\regress_megaman_generation2.png
+EXIT 0

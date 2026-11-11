@@ -1,0 +1,34 @@
+[[mod_function_hook]]
+id = "mm1.widescreen.draw"
+addr = 0xD174
+bytes = "A6 0C BD 00 06 C9 F8 D0"
+
+[[mod_function_hook]]
+id = "mm1.widescreen.build"
+addr = 0xD137
+bytes = "A9 06 85 42 8D 06 C0 A0"
+
+[[mod_function_hook]]
+id = "mm1.widescreen.cull"
+addr = 0x9951
+bytes = "F0 05 A9 01 4C 96 99 BD"
+
+[[mod_function_hook]]
+id = "mm1.widescreen.minor_cull"
+addr = 0xBE81
+bytes = "F0 03 4C B1 BE BD A0 06"
+
+[[mod_function_hook]]
+id = "mm1.widescreen.spawn"
+addr = 0xD8A8
+bytes = "A5 8F F0 03 20 08 DB A5"
+
+[[mod_function_hook]]
+id = "mm1.widescreen.dma0"
+addr = 0xD4C7
+bytes = "8D 14 40 20 79 D6 A5 37"
+
+[[mod_function_hook]]
+id = "mm1.widescreen.emit"
+addr = 0xD299
+bytes = "A4 0D E8 E8 E8 E8 E0 FC"

@@ -28,7 +28,7 @@ static const uint8_t order[]={0,5,4,1,6,2,3,7};
 static const uint8_t mask[]={0,2,4,8,16,32,64,128};
 
 static int safe(void) {
-    return state.ready && state.stage==R(0x31) && R(0x31)<10 && mm1_coop_total()==32 && R(0x600)<248 && R(0x6A) &&
+    return !mm1_coop_seat_blocked(mm1_coop_seat()) && state.ready && state.stage==R(0x31) && R(0x31)<10 && mm1_coop_total()==32 && R(0x600)<248 && R(0x6A) &&
         !(R(0x420)&15) && !R(0x1E) && !R(0x26) && !R(0x41) && !R(0x95) && !R(0xAD) && !mm1_coop_controls_paused() && !state.menu;
 }
 int mm1_controls_safe(void){return safe();}
@@ -102,7 +102,7 @@ static int dispatch(uint16_t address) {
 static int safe_seat(int seat) {
     if(seat==mm1_coop_seat())return safe();WeaponState *s=&states[seat];
 #define P(a) mm1_coop_read(seat,(a))
-    int result=s->ready&&s->stage==R(0x31)&&R(0x31)<10&&mm1_coop_total()==32&&P(0x600)<248&&P(0x6A)&&
+    int result=!mm1_coop_seat_blocked(seat)&&s->ready&&s->stage==R(0x31)&&R(0x31)<10&&mm1_coop_total()==32&&P(0x600)<248&&P(0x6A)&&
         !(P(0x420)&15)&&!R(0x1E)&&!R(0x26)&&!R(0x41)&&!P(0x95)&&!P(0xAD)&&!mm1_coop_controls_paused()&&!s->menu;
 #undef P
     return result;

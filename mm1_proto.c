@@ -79,10 +79,10 @@ int mm1_proto_dispatch(void) {
     state.dispatched=1;W(0x55,2);
     return 1;
 }
-static int player(uint16_t address){(void)address;return mm1_proto_teleporting()!=0;}
+static int player(uint16_t address){(void)address;return mm1_proto_teleporting()!=0||mm1_coop_controller_blocked();}
 static int damage(uint16_t address) {
     (void)address;
-    if(state.teleport)return 1;
+    if(state.teleport||mm1_coop_seat_blocked(mm1_coop_seat()))return 1;
     if(mm1_proto_selected()&&real_mode) {
         int amount=R(0x0C);W(0x0C,amount>127?255:amount*2);state.damage_hits++;
     }

@@ -109,7 +109,7 @@ static void steer(void) {
 }
 void mm1_charge_dispatch(void) {
     if(!enabled)return;
-    if(mm1_weapon_identity()!=0||!mm1_controls_gameplay()||!R(0x6A)||mm1_proto_teleporting()) {
+    if(mm1_weapon_identity()!=0||!mm1_controls_gameplay()||!R(0x6A)||mm1_proto_teleporting()||mm1_coop_seat_blocked(mm1_coop_seat())) {
         if(mm1_weapon_identity()!=0)C.flashing=0;mm1_charge_cancel();steer();return;
     }
     /* Ordinary recoil preserves the charge without advancing it. */

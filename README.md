@@ -42,9 +42,14 @@ the original death script takes one shared life and restarts both players with
 their own weapon energy. Either controller can continue from native Game Over.
 Death handoffs retain the displayed character and its weapon colors through
 lagged frames and current-build save/load.
-Withdrawal/rejoin, checkpoint revival, personal menus, independent views and
-online play are still being implemented; the Co-op package is not exposed in
-the Mods catalog yet.
+Hold Select for 90 gameplay ticks to withdraw while a partner remains active;
+press it again to rejoin beside a safely grounded partner. Rejoining retains
+health, weapon selection and ammo. Reaching a new native checkpoint revives a
+dead partner with full health, and a team retry uses that checkpoint.
+Targeted Cut Man checks cover these paths, low ceilings, simultaneous Select,
+and a survivor dying while the partner is arriving. Personal menus, full-stage
+transition coverage, independent views and online play are still being
+implemented; the Co-op package is not exposed in the Mods catalog yet.
 
 ## Cycle backend migration branch
 

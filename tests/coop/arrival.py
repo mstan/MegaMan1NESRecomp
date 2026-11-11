@@ -19,8 +19,8 @@ def main():
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
         return {r['frame']:r for r in map(json.loads,(a.out/(name+'.jsonl')).read_text().splitlines())}
     saves=[]
-    for frame in (970,972,975):saves+=['--save-state',f'{frame}:{a.out/f"arrival-{frame}.cycstate"}']
-    rows=run('producer',980,saves)
+    for frame in (970,972,975,984):saves+=['--save-state',f'{frame}:{a.out/f"arrival-{frame}.cycstate"}']
+    rows=run('producer',1010,saves)
     options=[f for f in (970,972,975) if rows[f+1]['intro'] and rows[f+1]['picture']]
     assert options,[(f,rows[f+1]) for f in (970,972,975)]
     frame=options[0];state=a.out/f'arrival-{frame}.cycstate';run('arrival',frame+1,('--load-state',str(state)))
@@ -37,8 +37,14 @@ def main():
     assert all(wide[y][(85+90)*3:(85+142)*3]==actual[y][90*3:142*3] for y in range(60))
     ready=run('ready',850);assert not ready[850]['ready'] and not ready[850]['intro']
     assert (a.out/'ready-native.png').read_bytes()==(a.out/'ready.png').read_bytes()
+    run('opening',985,('--load-state',str(a.out/'arrival-984.cycstate')))
+    reference=a.out/'reference-input.txt';reference.write_text(route.read_text()+'850 POKE 0480 68\n')
+    run('opening-reference',985,('--input',str(reference),'--coop','off','--protoman','off'))
+    _,_,opening=pixels(a.out/'opening.png');_,_,expected=pixels(a.out/'opening-reference-native.png')
+    assert all(opening[y][92*3:116*3]==expected[y][92*3:116*3] for y in range(128,164)),'Native partner opening differs'
     summary=dict(result='pass',native_guest_mega_arrival_pixels_exact=True,arrival_opaque_pixels=visible,
-        first_arrival_frame=frame,fit_native_grid_exact=True,ready_text_preserved=True,initial_state_picture_exact=True)
+        first_arrival_frame=frame,fit_native_grid_exact=True,ready_text_preserved=True,initial_state_picture_exact=True,
+        native_guest_opening_pixels_exact=True)
     (a.out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary))
 
 if __name__=='__main__':main()

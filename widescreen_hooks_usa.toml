@@ -289,3 +289,9 @@ bytes = "A5 31 85 AC A9 0A 85 31"
 id = "mm1.coop.checkpoint"
 addr = 0xC26B
 bytes = "A6 31 DD D4 C2 90 35 A0"
+
+[[mod_function_hook]]
+id = "mm1.coop.contact"
+addr = 0xA18B
+bank = 5
+bytes = "38 AD 80 04 E5 1A 38 E9"

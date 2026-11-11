@@ -15,7 +15,7 @@ static unsigned wrapped_oam,hud_oam;
 static int game_camera(void) {return R(0x1A)|(R(0x1B)<<8);}
 static int actor_x(int slot) {return R(0x480+slot)|(R(0x460+slot)<<8);}
 static int game_valid(void) {
-    return R(0x31)<10 && mm1_coop_total()==32 && mm1_coop_read(mm1_coop_anchor(),0x600)<248 && R(0x28)>=R(0x27) &&
+    return R(0x31)<10 && mm1_coop_total()==32 && (mm1_coop_read(mm1_coop_anchor(),0x600)<248||mm1_coop_view_active()) && R(0x28)>=R(0x27) &&
            R(0x28)<48 && R(0x1B)>=R(0x27) && R(0x1B)<=R(0x28) &&
            !R(0x1E) && !(R(0x26)&1);
 }

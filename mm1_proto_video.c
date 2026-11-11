@@ -85,7 +85,7 @@ void mm1_proto_pose_begin(void) {
     f->light=R(0x3E1);f->accent=R(0x3E2);
     /* The simulation keeps its native damage guard. Only this drawing call
      * gets visible parts so the transition has an actual OAM ownership record. */
-    if(f->teleport&&f->replace){video.invulnerability=R(0x55);video.restoring=1;W(0x55,0);}
+    if((f->teleport&&f->replace)||mm1_coop_transporting()){video.invulnerability=R(0x55);video.restoring=1;W(0x55,0);}
 }
 void mm1_proto_part_emitted(int slot) {
     int actor=R(0x0C);

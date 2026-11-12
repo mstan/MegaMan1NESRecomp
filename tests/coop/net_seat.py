@@ -55,6 +55,8 @@ with (r/(name+'.log')).open('w') as log:
    assert cmd('window_size',w=1280,h=720)['ok'];time.sleep(.08);assert cmd('state')['picture'][0]==256
    assert cmd('screenshot',layer='ui',path=str(r/'online-view-final.png'))['ok']
    ui['save-refused']=cmd('save_state',path=str(r/'refused-online.cycstate'));assert not ui['save-refused']['ok'] and not (r/'refused-online.cycstate').exists()
+   ui['qa-poke-refused']=cmd('ws_poke',addr=85,value=0);assert not ui['qa-poke-refused']['ok']
+   ui['qa-step-refused']=cmd('ws_step',frames=1,pad=0);assert not ui['qa-step-refused']['ok']
    assert cmd('menu',open=False)['ok'];stream.close();s.close()
   child.wait(timeout=max(1,180-(time.monotonic()-started)))
  finally:

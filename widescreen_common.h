@@ -270,12 +270,14 @@ static void tcp_state(int id,const char *line) {
     cyc_tcp_ok(id,out);
 }
 static void tcp_poke(int id,const char *line) {
+    if(mm1_net_locked()){cyc_tcp_err(id,"Online gameplay cannot be changed through test commands");return;}
     long addr,val;if(!cyc_tcp_long(line,"addr",&addr)||!cyc_tcp_long(line,"value",&val)||addr<0||addr>65535||val<0||val>255||!W(addr,val)) {
         cyc_tcp_err(id,"ws_poke: writable RAM addr and byte value");return;
     }
     cyc_render_frame_done();cyc_tcp_ok(id,NULL);
 }
 static void tcp_step(int id,const char *line) {
+    if(mm1_net_locked()){cyc_tcp_err(id,"Online gameplay cannot be advanced through test commands");return;}
     long frames=1,pad=0;cyc_tcp_long(line,"frames",&frames);cyc_tcp_long(line,"pad",&pad);
     if(frames<1 || frames>600 || pad<0 || pad>255){cyc_tcp_err(id,"ws_step: frames 1..600, pad 0..255");return;}
     cyc_set_controller(0,(uint8_t)pad);

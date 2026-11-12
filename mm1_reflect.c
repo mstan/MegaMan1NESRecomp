@@ -26,6 +26,7 @@ static void refresh(void) {
     for(int i=0;i<6;i++)nes_mod_set_function_hook_enabled(hooks[i],enabled||S.active);
 }
 int mm1_weapon_identity(void){return S.active&&S.owner==mm1_coop_seat()?S.weapon:R(0x5F);}
+int mm1_weapon_identity_for(int seat){return S.active&&S.owner==seat?S.weapon:mm1_coop_read(seat,0x5F);}
 int mm1_reflect_busy(void){return S.active!=0;}
 void mm1_reflect_configure(int on){enabled=on!=0;refresh();}
 void mm1_reflect_reset(void){memset(&S,0,sizeof S);refresh();}

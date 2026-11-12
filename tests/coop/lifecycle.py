@@ -9,7 +9,10 @@ def main():
     p.add_argument('--handoff-only',action='store_true')
     p.add_argument('--palette-handoff',action='store_true',help='use a distinct native guest weapon palette')
     p.add_argument('--reverse-roster',action='store_true')
+    p.add_argument('--view',choices=('shared','split','p1','p2'),default='shared')
+    p.add_argument('--far-guest',action='store_true',help='Qualify a surviving new primary outside the old native window')
     a=p.parse_args();a.exe=a.exe.resolve();a.out.mkdir(parents=True,exist_ok=True)
+    assert not a.far_guest or a.view=='split' and a.handoff_only
     env=dict(os.environ,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy',NESRECOMP_NO_LAUNCHER='1')
     def run(name,victim,team=False,game_over=False,extra=(),stop=0,protect=False):
         frames=stop or (2800 if game_over else 2350 if team else 1700)
@@ -20,14 +23,16 @@ def main():
         def personal(frame,seat,values):
             for address,value in values.items():pokes.extend(('--coop-test-poke',f'{frame}:{seat+1}:{address:X}:{value:X}'))
         personal(1490,0,{0x6A:2 if victim==0 and not protect else 28,0x55:0,0x6F:7})
-        personal(1490,1,{0x480:104,0x460:0,0x600:180,0x420:64,0x400:0,0x440:0,0x640:0,
+        personal(1490,1,{0x480:32 if a.far_guest else 104,0x460:2 if a.far_guest else 0,0x600:180,0x420:64,0x400:0,0x440:0,0x640:0,
             0x680:0,0x660:0,0x4A0:0,0x620:0,0x55:0,0x6A:4 if victim==1 else 28,0x6F:19})
         def bullet(frame,seat):
-            values={0x400:255,0x420:2,0x440:0,0x460:0,0x480:128 if seat==0 else 104,
+            values={0x400:255,0x420:2,0x440:0,0x460:2 if seat==1 and a.far_guest else 0,0x480:128 if seat==0 else 32 if a.far_guest else 104,
                 0x4A0:0,0x4C0:0,0x4E0:0,0x600:148 if seat==0 else 180,0x620:0,0x640:127,
                 0x660:0,0x680:0,0x6A0:1,0x6C0:1,0x6E0:0x1A}
             for address,value in values.items():lines.append(f'{frame} POKE {address+18:04X} {value:02X}')
         bullet(1499,victim);lines+=['1510 POKE 0612 F8']
+        if a.far_guest:
+            for slot in range(16,32):lines.append(f'1498 POKE {0x600+slot:04X} F8')
         if a.palette_handoff:lines+=['1490 X2:R','1491 X2:-']
         if team:
             personal(1540,victim^1,{0x6A:2 if victim==1 else 4,0x55:0})
@@ -38,7 +43,7 @@ def main():
             lines += [f'1450 {seat}B',f'1560 {seat}-',f'1600 {seat}LEFT',f'1630 {seat}-']
         route=a.out/(name+'.txt');route.write_text('\n'.join(sorted(lines,key=lambda s:int(s.split()[0])))+'\n')
         args=[str(a.exe),str(a.rom.resolve()),'--frames',str(frames),'--input',str(route),'--coop','on',
-            '--mm4-rom',str(a.donor.resolve()),'--charge','on','--weapon-cycle','on','--widescreen','off','--no-save',
+            '--mm4-rom',str(a.donor.resolve()),'--charge','on','--weapon-cycle','on','--widescreen','off','--no-save','--coop-view',a.view,
             '--config',str(a.out/'test.ini'),*pokes,'--coop-report',str(a.out/(name+'.jsonl')),
             '--charge-report',str(a.out/(name+'-charge.jsonl')),'--hash-out',str(a.out/(name+'.hash')),
             '--present-out',str(a.out/(name+'.png')),'--frame-log',str(a.out/(name+'.frames')),
@@ -55,16 +60,20 @@ def main():
         state=a.out/'handoff.cycstate'
         rows=run('handoff',0,extra=('--save-state',f'1499:{state}','--present-every','1499','--wav-out',str(a.out/'handoff.wav')))
         first=rows[1500];assert first['anchor']==1 and first['shown_owner']==0 and first['guest_owner']==1 and first['picture'],first
+        if a.far_guest:
+            assert rows[1700]['hp'][1]==28 and rows[1700]['x'][1]<rows[1599]['x'][1]-20,rows[1700]
         if a.palette_handoff:assert first['weapon'][1]==3,first
         run('reference',0,protect=True,stop=1500,extra=('--screenshot',str(a.out/'reference-native.png')))
         _,_,expected=pixels(a.out/'reference.png');_,_,actual=pixels(a.out/'handoff_01499.png');_,_,raw=pixels(a.out/'reference-native.png')
-        assert all(expected[y][90*3:120*3]==actual[y][90*3:120*3] for y in range(160,192))
-        visible=sum(expected[y][x*3:x*3+3]!=raw[y][x*3:x*3+3] for y in range(160,192) for x in range(90,120))
+        left=370 if a.far_guest else 346 if a.view=='split' else 90
+        assert all(expected[y][left*3:(left+30)*3]==actual[y][left*3:(left+30)*3] for y in range(160,192))
+        visible=sum(expected[y][x*3:x*3+3]!=(expected[y][(left-16)*3:(left-15)*3] if a.view!='shared' else raw[y][x*3:x*3+3])
+            for y in range(160,192) for x in range(left,left+30))
         assert visible>100,visible
         run('handoff-next',0,stop=1501,extra=('--load-state',str(state)))
         run('reference-next',0,protect=True,stop=1501)
         _,_,next_expected=pixels(a.out/'reference-next.png');_,_,next_actual=pixels(a.out/'handoff-next.png')
-        assert all(next_expected[y][90*3:116*3]==next_actual[y][90*3:116*3] for y in range(164,192)),'First new primary palette differs'
+        assert all(next_expected[y][left*3:(left+26)*3]==next_actual[y][left*3:(left+26)*3] for y in range(164,192)),'First new primary palette differs'
         run('handoff-still',0,stop=1500,extra=('--load-state',str(state)))
         assert (a.out/'handoff-still.png').read_bytes()==(a.out/'handoff_01499.png').read_bytes()
         def pcm(path):
@@ -72,6 +81,14 @@ def main():
         for name,victim,team,frame in (('handoff',0,False,1499),('retry',0,True,1620)):
             snapshot=state if not team else a.out/'retry.cycstate'
             if team:run(name,victim,team=True,extra=('--save-state',f'{frame}:{snapshot}','--wav-out',str(a.out/(name+'.wav'))))
+            if team and a.view=='split':
+                run('retry-picture',victim,team=True,stop=frame+1,extra=('--load-state',str(snapshot),
+                    '--screenshot',str(a.out/'retry-native.png')))
+                _,_,native_death=pixels(a.out/'retry-native.png');_,_,shown_death=pixels(a.out/'retry-picture.png')
+                for seat in (0,1):
+                    different=sum(native_death[y][x*3:x*3+3]!=shown_death[y][(seat*256+x)*3:(seat*256+x)*3+3]
+                        for y in range(240) for x in range(256))
+                    assert different==0,('Native shared death-script picture differs',seat,different)
             resume=name+'-resume';run(resume,victim,team=team,extra=('--load-state',str(snapshot),'--wav-out',str(a.out/(resume+'.wav'))))
             tail=[s for s in (a.out/(name+'.hash')).read_text().splitlines() if s[:1].isdigit() and int(s.split()[0])>frame]
             assert (a.out/(resume+'.hash')).read_text().splitlines()==tail
@@ -82,6 +99,7 @@ def main():
         assert (a.out/'handoff.png').read_bytes()==(a.out/'handoff-interpreter.png').read_bytes()
         summary=dict(result='pass',actual_first_handoff_keeps_live_player_pixels=True,guest_opaque_pixels=visible,
             first_new_primary_colors_exact=True,distinct_weapon_palette=a.palette_handoff,reverse_roster=a.reverse_roster,
+            view=a.view,surviving_new_primary_outside_native_window=a.far_guest,
             first_handoff_immediate_state_pixels_exact=True,handoff_and_native_retry_state_pcm_exact=True,native_interpreter_exact=True)
         (a.out/'handoff-summary.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary));return
     for victim in (0,1):

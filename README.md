@@ -65,8 +65,16 @@ Ordinary native enemy AI targets the nearest living player, with withdrawn
 players excluded. Damage reactions retain the actual attacker's equipment.
 Dense native AI checks cover palette preservation and an interrupted update's
 current-build state, immediate image and audio continuation.
-Full-stage transition coverage, independent views and online play are still being
-implemented; the Co-op package is not exposed in the Mods catalog yet.
+`--coop-view shared|split|p1|p2` chooses the development view. Independent views
+use one native 256x240 grid per player, with that player's health, weapon meter
+and usable native inventory. Only the player who paused can resume. Their
+simulation activates ordinary enemies in the union of both views, retaining the
+original enemy pool and retrying when a slot becomes available. Shots can cross
+into the partner's view. Targeted checks compare full native images, both native
+menu panels, local view modes, distant survivor handoffs, native death scripts
+and current-build state/audio continuation.
+Full-stage transition coverage and online play are still being implemented;
+the Co-op package is not exposed in the Mods catalog yet.
 
 ## Cycle backend migration branch
 

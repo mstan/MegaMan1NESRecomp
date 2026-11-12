@@ -336,3 +336,18 @@ id = "mm1.coop.magnet-ride"
 addr = 0x9634
 bank = 5
 bytes = "A5 60 C9 C7 D0 2A A2 00"
+
+[[mod_function_hook]]
+id = "mm1.coop.spawn-candidate"
+addr = 0xD9AD
+bytes = "85 02 84 03 C9 FF D0 06"
+
+[[mod_function_hook]]
+id = "mm1.coop.private-oam-full"
+addr = 0xD2A6
+bytes = "68 68 4C B3 C3 BD 20 04"
+
+[[mod_function_hook]]
+id = "mm1.coop.view-hud"
+addr = 0xD36E
+bytes = "A4 0D A5 BB 30 75 A9 68"

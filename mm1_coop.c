@@ -11,6 +11,7 @@
 #include "cyc_mm4_audio.h"
 #include "cyc_render.h"
 #include "cyc_ring.h"
+#include "cyc_video.h"
 #include "logical_input.h"
 #include "mod_function_hooks.h"
 #include "mod_runtime.h"
@@ -25,7 +26,7 @@ enum {TELE_NONE,TELE_OUT,TELE_HIDDEN,TELE_IN,TELE_OPEN};
 typedef struct {uint8_t ram[MAX_PERSONAL],previous,held,dead,blast_ticks,death_y,death_screen,death_x,
     death_sprite,death_flags,death_anim,death_fire,teleport,teleport_tick,transport_dispatched;
     int16_t beam_y,beam_floor;} Player;
-typedef struct {int16_t x;uint8_t y,attr,height,pattern[32],palette[4];} Part;
+typedef struct {int16_t x;uint8_t y,attr,height,actor,pattern[32],palette[4];} Part;
 typedef struct {uint64_t mask;int16_t origin;uint16_t camera;uint8_t oam[256];Part parts[64];} Picture;
 typedef struct {
     CycModRegs regs;
@@ -35,8 +36,9 @@ typedef struct {
     uint8_t hit_owner[32];uint32_t pending;uint16_t before_hits;
 } World;
 typedef struct {
-    char magic[4];uint8_t on,initialized,stage,current,in_guest,drawing,roster,anchor;
-    Player players[2];Picture building,shown;uint8_t oam[256];
+    char magic[4];uint8_t on,initialized,stage,current,in_guest,drawing,roster,anchor,independent;
+    Player players[2];Picture building,shown,view_build[2],view_shown[2];uint8_t oam[256];
+    uint8_t view_ready,view_drawing,view_visible;
     uint64_t draw_mask;uint8_t draw_oam[256];
     uint64_t primary_build_mask;uint8_t primary_oam[256];int16_t insert_slot;uint8_t primary_cursor,primary_seen,pair_ready;
     uint32_t test_applied;
@@ -49,12 +51,15 @@ typedef struct {
     uint64_t updates,failures,deaths[2];
 } Coop;
 static Coop C;
-static int enabled,roster;
+static int enabled,roster,view_mode;
 static uint16_t addresses[MAX_PERSONAL],indices[2048];
 static int address_count;
 static FILE *report;
 static struct {uint32_t frame;uint16_t address;uint8_t seat,value;} test_pokes[32];
 static int test_poke_count;
+static int private_camera,private_full;
+static int16_t private_x[64];
+static uint8_t private_actor[64];
 static int begin_team_death(void);
 static void enforce_dead(void);
 static void hide_dead_body(void);
@@ -68,6 +73,28 @@ int mm1_coop_view_active(void){
     if(!enabled||!C.initialized||C.wiping)return 0;
     for(int seat=0;seat<2;seat++)if(!C.players[seat].dead&&C.players[seat].teleport!=TELE_HIDDEN&&mm1_coop_read(seat,0x600)<239)return 1;
     return 0;
+}
+int mm1_coop_independent(void){return enabled&&view_mode!=0;}
+int mm1_coop_independent_scene(void){return mm1_coop_independent()&&C.initialized&&!C.wiping&&C.stage==R(0x31)&&R(0x31)<10;}
+int mm1_coop_draw_suppressed(void){return mm1_coop_independent_scene()&&C.view_drawing;}
+int mm1_coop_draw_camera(void){return C.drawing==2?private_camera:R(0x1B)*256+R(0x1A);}
+int mm1_coop_view_mode(void){return view_mode;}
+int mm1_coop_view_locked(void){return C.wiping||R(0x1E)||R(0x26)||R(0x68)||R(0x3E)||(!C.initialized);}
+int mm1_widescreen_mode(void);
+void mm1_world_views_reset(void);
+void mm1_coop_view_policy(void){
+    if(mm1_coop_independent())cyc_video_request_width(view_mode==1?512:256);
+    else cyc_video_set_mode(mm1_widescreen_mode());
+}
+int mm1_coop_view_rects(int left[2]) {
+    if(!mm1_coop_independent()||!C.initialized||C.stage!=R(0x31)||R(0x31)>=10)return 0;
+    int camera=R(0x1B)*256+R(0x1A),lo=R(0x27)*256,hi=R(0x28)*256;
+    for(int seat=0;seat<2;seat++) {
+        int who=mm1_coop_seat_blocked(seat)||!mm1_coop_read(seat,0x6A)?C.anchor:seat;
+        int x=mm1_coop_read(who,0x460)*256+mm1_coop_read(who,0x480)-128;
+        if(x<lo)x=lo;if(x>hi)x=hi;
+        left[seat]=mm1_coop_view_locked()?camera:x;
+    }return 2;
 }
 static void restore_death_body(const Player *p) {
     W(0x600,p->death_y);W(0x460,p->death_screen);W(0x480,p->death_x);
@@ -127,6 +154,10 @@ static int ai_personal_color(const Player *p,int address) {
    into that guest nor replace the physical anchor's pending palette. */
 static void capture(Player *p){for(int i=0;i<address_count;i++)if(!ai_personal_color(p,addresses[i]))p->ram[i]=R(addresses[i]);}
 static void project(const Player *p){for(int i=0;i<address_count;i++)if(!ai_personal_color(p,addresses[i]))W(addresses[i],p->ram[i]);}
+int mm1_coop_spawn_project(int seat) {
+    if(!cyc_mod_isolated()||!enabled||!C.initialized||seat<0||seat>1)return 0;
+    if(seat!=C.current)project(&C.players[seat]);return 1;
+}
 static void personal(Player *p,unsigned address,unsigned value){if(indices[address])p->ram[indices[address]-1]=(uint8_t)value;}
 int mm1_coop_read(int seat,uint16_t address) {
     if(seat<0||seat>1||address>=2048)return 0;
@@ -177,6 +208,7 @@ static void initialize(void) {
     C.wiping=C.restarting=C.game_over=C.pending_wipe=0;project(&C.players[0]);
     C.withdrawn=C.revive_pending=0;memset(C.select_hold,0,sizeof C.select_hold);memset(C.select_armed,0,sizeof C.select_armed);
     memset(C.select_previous,0,sizeof C.select_previous);
+    C.view_ready=C.view_drawing=C.view_visible=0;memset(C.view_build,0,sizeof C.view_build);memset(C.view_shown,0,sizeof C.view_shown);
 }
 enum {WEAPON_WORLD_BYTES=1+0xD0+38};
 static unsigned weapon_world_address(int i) {
@@ -188,6 +220,12 @@ static unsigned weapon_world_address(int i) {
 }
 static int private_call(uint16_t address,CycModRegs *regs,int limit,int hooks) {
     if(!cyc_mod_isolate_begin())return 0;
+    if(address==0x94A8&&mm1_coop_independent_scene()) {
+        int left[2];if(mm1_coop_view_rects(left)) {
+            W(0x1A,left[C.current]);W(0x1B,left[C.current]>>8);
+            if(!cyc_mod_call(0xCD72,regs)){cyc_mod_isolate_end();return 0;}
+        }
+    }
     if(limit)W(0x54,16);
     /* The retail controller leaves actor zero as the collision reference for
        A35C. The isolated controller's caller scratch is restored on return. */
@@ -209,7 +247,7 @@ static int private_call(uint16_t address,CycModRegs *regs,int limit,int hooks) {
             for(int slot=0;slot<64;slot++)if(C.draw_mask&(1ull<<slot)) {
                 const uint8_t *o=C.building.oam+slot*4;
                 if(memcmp(o,C.draw_oam+slot*4,4))continue;
-                C.building.mask|=1ull<<slot;Part *p=&C.building.parts[slot];p->x=o[3];p->y=o[0];p->attr=o[2];
+                C.building.mask|=1ull<<slot;Part *p=&C.building.parts[slot];p->x=o[3];p->y=o[0];p->attr=o[2];p->actor=private_actor[slot];
                 p->height=(R(0xFF)&32)?16:8;
                 unsigned pattern=p->height==16?(o[1]&1)*0x1000+(o[1]&254)*16:
                     ((R(0xFF)&8)?0x1000:0)+o[1]*16;
@@ -227,6 +265,60 @@ static int private_call(uint16_t address,CycModRegs *regs,int limit,int hooks) {
         int before=R(0x45);if(count>=before&&count<=16){for(int i=before;i<count;i++)W(0x580+i,sound[i]);W(0x45,count);}
     }
     return ok;
+}
+static int private_oam_full(uint16_t address) {
+    (void)address;if(C.drawing!=2||!cyc_mod_isolated())return 0;
+    private_full=1;W(0x0D,252);return 1;
+}
+static void draw_view_player(int seat,int freeze) {
+    int previous=C.current;capture(&C.players[previous]);C.current=(uint8_t)seat;project(&C.players[seat]);
+    Picture *f=&C.view_build[seat];memset(f,0,sizeof *f);
+    private_camera=R(0x460)*256+R(0x480)-128;f->camera=(uint16_t)private_camera;
+    uint8_t result[MAX_PERSONAL];CycModRegs r={0};cyc_mod_regs(&r);
+    int ok=cyc_mod_isolate_begin();
+    if(ok) {
+        C.in_guest=1;C.drawing=2;C.draw_mask=0;private_full=0;cyc_mod_allow_isolated_hooks(true);
+        ok=cyc_mod_call(0xC413,&r);W(0x54,16);W(0x0D,0);
+        W(0x1A,private_camera);W(0x1B,private_camera>>8);
+        /* AI projection deliberately leaves physical armor with the anchor;
+           this isolated native art capture needs the requested owner's colors. */
+        W(0x3E1,C.players[seat].ram[indices[0x3E1]-1]);W(0x3E2,C.players[seat].ram[indices[0x3E2]-1]);
+        for(int i=0;i<64;i++)W(0x200+i*4,248);
+        mm1_proto_draw_begin();
+        uint8_t life[16];for(int slot=0;slot<16;slot++)life[slot]=R(0x6A0+slot);
+        if(freeze)for(int slot=0;slot<16;slot++)if(slot!=1)W(0x6A0+slot,life[slot]+1);
+        for(int n=0;n<16&&ok&&!private_full;n++) {
+            int actor=(R(0x23)&1)?n:15-n;if(actor==1||R(0x600+actor)>=248)continue;
+            int camera=R(0x460+actor)*256+R(0x480+actor)-128;
+            W(0x1A,camera);W(0x1B,camera>>8);W(0x0C,actor);ok=cyc_mod_call(0xD16E,&r);
+            if(private_full)mm1_proto_pose_done();
+        }
+        if(freeze)for(int slot=0;slot<16;slot++)if(slot!=1)W(0x6A0+slot,life[slot]);
+        if(ok) {
+            mm1_video_private_finish();for(int i=0;i<256;i++)f->oam[i]=R(0x200+i);
+            f->mask=C.draw_mask;
+            for(int slot=0;slot<64;slot++)if(f->mask&(1ull<<slot)) {
+                const uint8_t *o=f->oam+slot*4;if(memcmp(o,C.draw_oam+slot*4,4)){f->mask&=~(1ull<<slot);continue;}
+                Part *p=&f->parts[slot];p->x=private_x[slot];p->y=o[0];p->attr=o[2];p->actor=private_actor[slot];p->height=(R(0xFF)&32)?16:8;
+                unsigned pattern=p->height==16?(o[1]&1)*0x1000+(o[1]&254)*16:((R(0xFF)&8)?0x1000:0)+o[1]*16;
+                for(int b=0;b<p->height*2;b++)p->pattern[b]=mm1_weapon_gfx_private((uint16_t)(pattern+b),cyc_render_chr((uint16_t)(pattern+b)));
+                for(int c=0;c<4;c++)p->palette[c]=R(0x3E0+(o[2]&3)*4+c)&63;
+            }
+            for(int i=0;i<address_count;i++)result[i]=R(addresses[i]);
+        }
+        C.in_guest=C.drawing=0;cyc_mod_isolate_end();
+    }
+    if(ok){for(int i=0;i<address_count;i++)W(addresses[i],result[i]);capture(&C.players[seat]);}
+    else {f->mask=0;C.failures++;}
+    C.current=(uint8_t)previous;project(&C.players[previous]);
+}
+void mm1_coop_views_draw(void) {
+    C.view_drawing=C.view_ready=0;if(!mm1_coop_independent_scene())return;
+    CycModRegs r={0};cyc_mod_regs(&r);
+    unsigned ret=R(0x100|(uint8_t)(r.s+1))|(R(0x100|(uint8_t)(r.s+2))<<8);
+    capture(&C.players[C.current]);
+    for(int seat=0;seat<2;seat++)draw_view_player(seat,seat!=C.anchor&&ret!=0x91C1);
+    C.view_drawing=C.view_ready=1;
 }
 static void prepare_guest_picture(int freeze) {
     int owner=C.current,guest=C.anchor^1;if((C.players[guest].dead&&!C.players[guest].blast_ticks)||C.players[guest].teleport==TELE_HIDDEN){C.building.mask=0;C.building_guest_owner=(uint8_t)guest;return;}
@@ -378,7 +470,10 @@ static int draw_part(uint16_t address) {
     CycModRegs r={0};cyc_mod_regs(&r);int slot=r.x/4+1;if(slot>=64)return 0;
     uint8_t *oam=C.drawing?C.draw_oam:C.primary_oam;
     if(C.drawing)C.draw_mask|=1ull<<slot;else C.primary_build_mask|=1ull<<slot;
-    for(int i=0;i<4;i++)oam[slot*4+i]=R(0x200+slot*4+i);return 0;
+    for(int i=0;i<4;i++)oam[slot*4+i]=R(0x200+slot*4+i);
+    if(C.drawing)private_actor[slot]=(uint8_t)actor;
+    if(C.drawing==2)private_x[slot]=(int16_t)(R(0x460+actor)*256+R(0x480+actor)-private_camera+(int8_t)(R(0x203+slot*4)-128));
+    return 0;
 }
 int mm1_coop_dispatch(void) {
     if(!enabled||C.wiping||C.in_guest||cyc_mod_isolated()||mm1_reflect_busy())return 0;
@@ -435,15 +530,19 @@ static int native_target(uint16_t target) {
     target--;W(0x100|stack,target>>8);stack=(stack-1)&255;W(0x100|stack,target);stack=(stack-1)&255;
     r.s=(uint8_t)stack;cyc_mod_set_regs(&r);return 1;
 }
-static int enemy_owner(int slot) {
-    World *w=&C.world;
-    if((w->pending&(1u<<slot))&&(R(0x420+slot)&128))return w->hit_owner[slot];
-    int chosen=-1,best=0x7FFFFFFF,ex=R(0x460+slot)*256+R(0x480+slot),ey=R(0x600+slot);
+int mm1_coop_nearest(int ex,int ey) {
+    if(!enabled||!C.initialized)return C.anchor;
+    int chosen=-1,best=0x7FFFFFFF;
     for(int seat=0;seat<2;seat++) {
         if(mm1_coop_seat_blocked(seat)||!mm1_coop_read(seat,0x6A))continue;
         int x=mm1_coop_read(seat,0x460)*256+mm1_coop_read(seat,0x480),y=mm1_coop_read(seat,0x600);
         int distance=abs(ex-x)+abs(ey-y);if(distance<best){best=distance;chosen=seat;}
     }return chosen;
+}
+static int enemy_owner(int slot) {
+    World *w=&C.world;
+    if((w->pending&(1u<<slot))&&(R(0x420+slot)&128))return w->hit_owner[slot];
+    return mm1_coop_nearest(R(0x460+slot)*256+R(0x480+slot),R(0x600+slot));
 }
 static int world_step(uint16_t address) {
     (void)address;if(!enabled||!C.initialized||C.wiping||cyc_mod_isolated())return 0;
@@ -554,7 +653,7 @@ static int native_return(uint16_t address) {
         mm1_coop_record_hits(C.current,w->before_hits,hit_flags());w->phase=3;W(0x54,16);return native_target(0x98EA);
     }
     W(0x54,w->total);W(0x9A,w->lift_count);
-    if(!C.players[C.current].dead||C.players[C.current].blast_ticks) {
+    if(!mm1_coop_independent_scene()&&(!C.players[C.current].dead||C.players[C.current].blast_ticks)) {
         CycModRegs draw=r;if(!private_call(0xD131,&draw,1,1))C.failures++;
     }
     capture(&C.players[C.current]);
@@ -583,11 +682,19 @@ void mm1_coop_stage_enter(void) {
     if(enabled)for(int seat=0;seat<2;seat++){C.current=(uint8_t)seat;mm1_charge_stage_enter();mm1_slide_stage_enter();}
     C.current=C.anchor=C.build_owner=C.shown_owner=0;C.building_guest_owner=C.shown_guest_owner=1;C.intro_picture=0;
     memset(&C.world,0,sizeof C.world);C.building.mask=C.shown.mask=0;C.pair_ready=0;
+    C.view_ready=C.view_drawing=C.view_visible=0;memset(C.view_build,0,sizeof C.view_build);memset(C.view_shown,0,sizeof C.view_shown);
 }
 void mm1_coop_video_latch(void) {
     if(!enabled)return;
     /* A lag NMI before the main native draw must retain both old bodies.
      * Publish a private draw only once the corresponding main draw began. */
+    if(C.pair_ready&&C.view_ready&&mm1_coop_independent_scene()) {
+        for(int seat=0;seat<2;seat++) {
+            C.view_shown[seat]=C.view_build[seat];C.view_shown[seat].origin=(int16_t)(C.view_shown[seat].camera-(R(0x1B)*256+R(0x1A)));
+            mm1_video_private_latch(seat);
+        }
+        C.view_visible=C.primary_seen;C.view_ready=0;
+    }
     if(C.pair_ready){C.shown=C.building;C.shown_guest_owner=C.building_guest_owner;
         if(C.shown_guest_owner==C.shown_owner)C.shown.mask=0;
         if(C.shown.mask)mm1_video_private_latch(C.shown_guest_owner);C.pair_ready=0;}
@@ -600,13 +707,15 @@ void mm1_coop_video_latch(void) {
     for(int i=0;i<256;i++)C.oam[i]=R(0x200+i);
 }
 int mm1_coop_picture(void) {
-    return enabled&&(C.initialized||C.intro_picture)&&!C.wiping&&C.shown.mask&&!mm1_controls_menu()&&
+    int mask=mm1_coop_independent_scene()?C.view_visible&&(C.view_shown[0].mask||C.view_shown[1].mask):C.shown.mask!=0;
+    return enabled&&(C.initialized||C.intro_picture)&&!C.wiping&&mask&&!mm1_controls_menu()&&
         mm1_proto_atlas()&&!memcmp(C.oam,cyc_render_oam(),256);
 }
-void mm1_coop_paint(uint32_t *out,int width,int x0,const uint8_t *coverage) {
-    if(!mm1_coop_picture())return;Picture *f=&C.shown;int previous=C.current;C.current=C.shown_guest_owner;
-    int offset=x0+f->origin;mm1_video_private_dust(out,width,offset,coverage);
+static void paint_player(uint32_t *out,int width,int x0,const uint8_t *coverage,Picture *f,int owner,int actor) {
+    int previous=C.current;C.current=(uint8_t)owner;
+    int offset=x0+f->origin;if(actor<=0)mm1_video_private_dust(out,width,offset,coverage);
     for(int slot=63;slot>=0;slot--)if(f->mask&(1ull<<slot)) {
+        if(actor>=0&&f->parts[slot].actor!=actor)continue;
         if(mm1_video_private_place(out,width,offset,coverage,slot))continue;
         const Part *p=&f->parts[slot];if(p->y>=239)continue;
         for(int row=0;row<p->height;row++)for(int col=0;col<8;col++) {
@@ -618,7 +727,19 @@ void mm1_coop_paint(uint32_t *out,int width,int x0,const uint8_t *coverage) {
             if(value)out[y*width+x]=cyc_render_color_value(p->palette[value]);
         }
     }
-    mm1_video_private_after(out,width,offset,coverage);C.current=(uint8_t)previous;
+    if(actor<=0)mm1_video_private_after(out,width,offset,coverage);C.current=(uint8_t)previous;
+}
+void mm1_coop_paint(uint32_t *out,int width,int x0,const uint8_t *coverage) {
+    if(!mm1_coop_picture())return;
+    if(mm1_coop_independent_scene()) {
+        paint_player(out,width,x0,coverage,&C.view_shown[C.shown_owner^1],C.shown_owner^1,-1);
+        paint_player(out,width,x0,coverage,&C.view_shown[C.shown_owner],C.shown_owner,-1);
+    }else paint_player(out,width,x0,coverage,&C.shown,C.shown_guest_owner,-1);
+}
+void mm1_coop_paint_actor(uint32_t *out,int width,int x0,const uint8_t *coverage,int actor) {
+    if(!mm1_coop_independent_scene()||!mm1_coop_picture())return;
+    paint_player(out,width,x0,coverage,&C.view_shown[C.shown_owner^1],C.shown_owner^1,actor);
+    paint_player(out,width,x0,coverage,&C.view_shown[C.shown_owner],C.shown_owner,actor);
 }
 static int death(uint16_t address) {
     (void)address;if(!enabled||!C.initialized||(cyc_mod_isolated()&&!C.in_guest)||C.wiping)return 0;
@@ -691,9 +812,11 @@ static void set_enabled(int on) {
     nes_mod_set_function_hook_enabled("mm1.coop.checkpoint",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.contact",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.magnet-ride",enabled);
+    nes_mod_set_function_hook_enabled("mm1.coop.private-oam-full",mm1_coop_independent());
     nes_mod_set_local_only("Mega Man 1 co-op development",enabled);
     mm1_coop_menu_refresh();
-    C.initialized=0;C.current=C.anchor=0;memset(&C.world,0,sizeof C.world);mm1_controls_refresh();mm1_video_character_changed();
+    C.initialized=0;C.current=C.anchor=0;C.view_ready=C.view_drawing=C.view_visible=0;memset(&C.world,0,sizeof C.world);
+    mm1_world_views_reset();mm1_controls_refresh();mm1_video_character_changed();mm1_coop_view_policy();
 }
 static void power_on(void *ctx){(void)ctx;memset(&C,0,sizeof C);domain();mm1_coop_menu_reset();}
 static void input(void *ctx,uint8_t buttons[2]) {
@@ -724,10 +847,10 @@ static void frame_end(void *ctx) {
         (unsigned long long)C.revivals[0],(unsigned long long)C.revivals[1],menu);
     }
 }
-static int get(uint8_t *out,int cap){if(cap<(int)sizeof C)return -1;memcpy(C.magic,"MCO6",4);C.on=(uint8_t)enabled;C.roster=(uint8_t)roster;memcpy(out,&C,sizeof C);return sizeof C;}
+static int get(uint8_t *out,int cap){if(cap<(int)sizeof C)return -1;memcpy(C.magic,"MCO7",4);C.on=(uint8_t)enabled;C.roster=(uint8_t)roster;C.independent=(uint8_t)mm1_coop_independent();memcpy(out,&C,sizeof C);return sizeof C;}
 static int valid(const uint8_t *in,int len) {
     if(!len)return !enabled;if(!in||len!=sizeof C)return 0;Coop n;memcpy(&n,in,sizeof n);
-    if(memcmp(n.magic,"MCO6",4)||n.on!=enabled||n.roster!=roster||n.initialized>1||n.current>1||n.anchor>1||n.in_guest||n.drawing||
+    if(memcmp(n.magic,"MCO7",4)||n.on!=enabled||n.roster!=roster||n.independent!=mm1_coop_independent()||n.initialized>1||n.current>1||n.anchor>1||n.in_guest||n.drawing||
         n.players[0].dead>1||n.players[1].dead>1||n.primary_seen>1||n.insert_slot< -1||n.insert_slot>=64)return 0;
     if(n.wiping>1||n.restarting>1||n.game_over>1||n.pending_wipe>1||n.wipe_owner>1||n.checkpoint>2)return 0;
     if(n.build_owner>1||n.shown_owner>1||n.building_guest_owner>1||n.shown_guest_owner>1||n.intro_picture>1)return 0;
@@ -736,19 +859,26 @@ static int valid(const uint8_t *in,int len) {
         n.select_hold[seat]>90||n.select_armed[seat]>1||n.select_previous[seat]>1||n.players[seat].beam_floor<0||n.players[seat].beam_floor>239||
         n.players[seat].beam_y< -16||n.players[seat].beam_y>248)return 0;
     if(n.world.phase>3||n.world.done>1||n.world.ai_active>1||n.world.draw_active>1||n.world.draw_owner>1||
-       n.world.refill_active>1||n.world.draw_freeze>1||n.pair_ready>1||
+       n.world.refill_active>1||n.world.draw_freeze>1||n.pair_ready>1||n.view_ready>1||n.view_drawing>1||n.view_visible>1||
        (n.world.phase&&(n.world.total!=32||n.world.regs.s<8))||
        (n.world.ai_active&&(n.world.ai_slot<16||n.world.ai_slot>=32)))return 0;
     for(int i=16;i<32;i++)if(n.world.hit_owner[i]>1)return 0;
-    const Picture *frames[]={&n.building,&n.shown};
-    for(int f=0;f<2;f++)for(int i=0;i<64;i++)if(frames[f]->mask&(1ull<<i)) {
-        const Part *p=&frames[f]->parts[i];if(p->height!=8&&p->height!=16)return 0;
+    const Picture *frames[]={&n.building,&n.shown,&n.view_build[0],&n.view_build[1],&n.view_shown[0],&n.view_shown[1]};
+    for(int f=0;f<6;f++)for(int i=0;i<64;i++)if(frames[f]->mask&(1ull<<i)) {
+        const Part *p=&frames[f]->parts[i];if((p->height!=8&&p->height!=16)||p->actor>=16||p->actor==1)return 0;
         for(int c=0;c<4;c++)if(p->palette[c]>63)return 0;
     }return 1;
 }
 static int put(const uint8_t *in,int len){if(!valid(in,len))return 0;memset(&C,0,sizeof C);if(len)memcpy(&C,in,sizeof C);return 1;}
 static bool option(void *ctx,const char *name,const char *value) {
     (void)ctx;if(!strcmp(name,"--coop-report")){report=fopen(value,"w");return report!=NULL;}
+    if(!strcmp(name,"--coop-view")) {
+        if(strcmp(value,"shared")&&strcmp(value,"split")&&strcmp(value,"p1")&&strcmp(value,"p2"))return false;
+        view_mode=!strcmp(value,"split")?1:!strcmp(value,"p1")?2:!strcmp(value,"p2")?3:0;
+        nes_mod_set_function_hook_enabled("mm1.coop.private-oam-full",mm1_coop_independent());
+        C.view_ready=C.view_drawing=C.view_visible=0;
+        mm1_world_views_reset();mm1_video_character_changed();mm1_coop_view_policy();return true;
+    }
     if(!strcmp(name,"--coop-test-poke")) {
         unsigned frame,seat,address,v;int n=0;domain();
         if(test_poke_count==32||sscanf(value,"%u:%u:%x:%x%n",&frame,&seat,&address,&v,&n)!=4||
@@ -765,10 +895,11 @@ static bool option(void *ctx,const char *name,const char *value) {
 const CycHostExtras *mm1_coop_extras(void) {
     static const CycHostOption options[]={{"--coop",true,"on|off: development co-op controller slice"},
         {"--coop-p1",true,"megaman|protoman: complementary character roster"},
+        {"--coop-view",true,"shared|split|p1|p2: co-op view"},
         {"--coop-test-poke",true,"FRAME:SEAT:ADDRESS:VALUE: bounded personal RAM precondition"},
         {"--coop-report",true,"FILE: personal controller observations"}};
     static const CycHostExtras extras={.power_on=power_on,.input=input,.frame_end=frame_end,
-        .option=option,.options=options,.option_count=4};return &extras;
+        .option=option,.options=options,.option_count=5};return &extras;
 }
 NES_MOD_CONSTRUCTOR(register_mm1_coop) {
 #ifdef MM1_PROFILE_USA
@@ -784,6 +915,7 @@ NES_MOD_CONSTRUCTOR(register_mm1_coop) {
        !nes_mod_register_function_entry_plugin("mm1.coop.game-over",0x9038,game_over)||
        !nes_mod_register_function_entry_plugin("mm1.coop.checkpoint",0xC26B,checkpoint_restart)||
        !nes_mod_register_function_entry_plugin("mm1.coop.contact",0xA18B,contact)||
-       !nes_mod_register_function_entry_plugin("mm1.coop.magnet-ride",0x9634,magnet_ride))abort();
+       !nes_mod_register_function_entry_plugin("mm1.coop.magnet-ride",0x9634,magnet_ride)||
+       !nes_mod_register_function_entry_plugin("mm1.coop.private-oam-full",0xD2A6,private_oam_full))abort();
 #endif
 }

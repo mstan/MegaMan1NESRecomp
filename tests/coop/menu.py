@@ -11,7 +11,9 @@ def main():
     p.add_argument('--fit',action='store_true')
     p.add_argument('--reopen',action='store_true')
     p.add_argument('--withdraw-guard',action='store_true')
+    p.add_argument('--view',choices=('shared','split','p1','p2'),default='shared')
     a=p.parse_args();a.exe=a.exe.resolve();a.out.mkdir(parents=True,exist_ok=True)
+    assert not a.reopen or a.view=='shared'
     env=dict(os.environ,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy',NESRECOMP_NO_LAUNCHER='1')
     boot=['0 -','0 2:-','180 START','181 -','360 START','361 -','1300 POKE 005D FE']
     key='2:' if a.owner==2 else '';other='' if a.owner==2 else '2:'
@@ -29,13 +31,15 @@ def main():
             0x640:0,0x680:0,0x660:0,0x55:255,0x6A:20 if seat==1 else 24,0x6F:7 if seat==1 else 19}.items():
             pokes+=['--coop-test-poke',f'1300:{seat}:{address:X}:{value:X}']
     if a.withdraw_guard:pokes+=['--coop-test-poke','1490:2:55:FF']
-    def run(name,extra=(),reference=False):
+    def run(name,extra=(),reference=False,reference_owner=None):
         path=a.out/(name+'.txt')
-        lines=boot+['1400 START','1401 -',f'1300 POKE 006F {7 if a.owner==1 else 19:02X}'] if reference else route
-        if reference and a.owner==1:lines+=['1420 DOWN','1421 -']
+        reference_owner=reference_owner or a.owner
+        lines=boot+['1400 START','1401 -',f'1300 POKE 006F {7 if reference_owner==1 else 19:02X}'] if reference else route
+        if reference and reference_owner==1:lines+=['1420 DOWN','1421 -']
         path.write_text('\n'.join(sorted(lines,key=lambda s:int(s.split()[0])))+'\n')
         args=[str(a.exe),str(a.rom.resolve()),'--frames','1430' if reference else '1650' if a.withdraw_guard else '1680' if a.reopen else '1520','--input',str(path),
-            '--protoman','on' if reference and a.owner==2 else 'off','--coop','off' if reference else 'on',
+            '--protoman','on' if reference and reference_owner==2 else 'off','--coop','off' if reference else 'on',
+            '--coop-view','shared' if reference else a.view,
             '--charge','off','--slide','off','--weapon-cycle','on',
             '--widescreen','fit' if a.fit else 'off','--widescreen-enemies','classic','--present-size','1280x720',
             '--no-save','--config',str(a.out/'test.ini'),*([] if reference else pokes),
@@ -52,7 +56,7 @@ def main():
         (a.out/'summary.json').write_text(json.dumps(dict(result='pass',withdrawal_start_does_not_open_peer_menu=True),indent=2)+'\n');return
     state=a.out/'menu.cycstate';rows=run('native',('--save-state',f'1449:{state}','--present-every','1429'))
     assert rows[1410]['menu']==1 and rows[1410]['menu_owner']==a.owner-1,rows[1410]
-    choices=[3,0] if a.owner==1 else [0,5]
+    choices=[3,5] if a.view!='shared' else [3,0] if a.owner==1 else [0,5]
     assert rows[1475]['menu']==1 and rows[1475]['weapon']==choices and rows[1475]['menu_failures']==0,rows[1475]
     assert rows[1475]['x']==rows[1410]['x'] and rows[1475]['updates']==rows[1410]['updates']
     if a.reopen:
@@ -61,15 +65,21 @@ def main():
     final=rows[1680 if a.reopen else 1520]
     assert not final['menu'] and final['weapon']==([3,5] if a.reopen else choices) and final['hp']==[20,24],final
     assert [x[4] for x in final['ammo']]==[7,19] and final['menu_failures']==0 and final['failures']==0,final
-    if a.smoke_only:print(json.dumps(dict(result='pass',shared_owner_inventory=True,owner=a.owner)));return
-    run('reference',reference=True)
-    width,height,expected=pixels(a.out/'reference.png');actual_width,_,actual=pixels(a.out/'native_01429.png')
-    assert (width,height)==(426 if a.fit else 256,240) and actual_width==width
-    offset=(width-256)//2
-    different=sum(expected[y+32][(x+offset+128)*3:(x+offset+128)*3+3]!=actual[y+32][(x+offset+128)*3:(x+offset+128)*3+3]
-        for y in range(160) for x in range(96))
-    assert different==0,('Native menu panel differs',different)
-    assert all(expected[y][(offset+120)*3:(offset+128)*3]==actual[y][(offset+120)*3:(offset+128)*3] for y in range(120,160)),'Menu backdrop retained player sprites'
+    if a.smoke_only:print(json.dumps(dict(result='pass',view=a.view,owner=a.owner)));return
+    panels=0
+    seats=(1,2) if a.view=='split' else (1,) if a.view=='p1' else (2,) if a.view=='p2' else (a.owner,)
+    for seat in seats:
+        name='reference'+str(seat);run(name,reference=True,reference_owner=seat)
+        width,height,expected=pixels(a.out/(name+'.png'));actual_width,_,actual=pixels(a.out/'native_01429.png')
+        assert (width,height)==(426 if a.fit else 256,240)
+        assert actual_width==(512 if a.view=='split' else 256 if a.view!='shared' else width)
+        offset=(width-256)//2
+        actual_offset=(seat-1)*256 if a.view=='split' else 0 if a.view!='shared' else offset
+        different=sum(expected[y+32][(x+offset+128)*3:(x+offset+128)*3+3]!=actual[y+32][(x+actual_offset+128)*3:(x+actual_offset+128)*3+3]
+            for y in range(160) for x in range(96))
+        assert different==0,('Native menu panel differs',seat,different)
+        assert all(expected[y][(offset+120)*3:(offset+128)*3]==actual[y][(actual_offset+120)*3:(actual_offset+128)*3] for y in range(120,160)),'Menu backdrop retained player sprites'
+        panels+=1
     run('interpreter',('--interp-only',));assert (a.out/'native.hash').read_bytes()==(a.out/'interpreter.hash').read_bytes()
     assert (a.out/'native.png').read_bytes()==(a.out/'interpreter.png').read_bytes()
     run('resume',('--load-state',str(state)))
@@ -78,7 +88,8 @@ def main():
     def pcm(name):
         with wave.open(str(a.out/(name+'.wav')),'rb') as f:return f.readframes(f.getnframes())
     continued=pcm('resume');assert continued and pcm('native')[-len(continued):]==continued
-    summary=dict(result='pass',owner=a.owner,fit=a.fit,reopen=a.reopen,native_panel_pixels_exact=15360,shared_view_owner_inventory_and_close=True,
+    summary=dict(result='pass',owner=a.owner,view=a.view,fit=a.fit,reopen=a.reopen,native_panel_pixels_exact=15360*panels,pauser_only_close=True,
+        personal_inventory_controls=True,
         world_frozen=True,original_background_without_player_sprites=True,own_health_ammo_retained=True,current_state_pcm_exact=True,native_interpreter_exact=True)
     (a.out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary))
 

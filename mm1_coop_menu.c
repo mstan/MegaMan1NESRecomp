@@ -140,7 +140,7 @@ static int menu(uint16_t address) {
         M.ticks++;int close=0;
         for(int seat=0;seat<2;seat++) {
             unsigned fresh=M.held[seat]&~M.previous[seat];
-            if(seat==M.owner&&mm1_coop_menu_ready(seat)) {
+            if((seat==M.owner||mm1_coop_independent())&&mm1_coop_menu_ready(seat)) {
                 if(fresh&12)move_cursor(seat,(fresh&8)!=0);
                 if(fresh&(0x80|0x10)) {
                     if(mm1_coop_menu_equip(seat,index_to_weapon[M.cursor[seat]]))M.selections[seat]++;

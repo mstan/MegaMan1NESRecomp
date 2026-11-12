@@ -57,6 +57,7 @@ static int game_native_bg(int x,int y,int *tile,int *pal);
 static void game_draw_native(uint32_t *out,int width,int x0);
 static void game_dma(void);
 static void enable(int on);
+int mm1_widescreen_mode(void){return enabled?aspect:NES_VIDEO_STOCK;}
 
 static int unwrap(int captured,int expected,int period) {
     int delta=(captured-expected+period/2)%period;
@@ -159,7 +160,9 @@ static int render_inner(uint32_t *out,int width,int height,int x0,const uint32_t
     return 1;
 }
 static int render(uint32_t *out,int width,int height,int x0,const uint32_t *native,void *user) {
-    int previous=mm1_coop_present_begin();int result=render_inner(out,width,height,x0,native,user);
+    int previous=mm1_coop_present_begin();
+    if(game_render_views(out,width,height,native)){mm1_coop_present_end(previous);return 1;}
+    int result=render_inner(out,width,height,x0,native,user);
     if(mm1_coop_menu_active()){if(!result){memset(out,0,width*height*sizeof(*out));for(int y=0;y<240;y++)memcpy(out+y*width+x0,native+y*256,256*sizeof(*out));}mm1_coop_menu_draw(out,width,-1);result=1;}
     mm1_coop_present_end(previous);return result;
 }
@@ -183,13 +186,18 @@ static void enable(int on) {
     enabled=on;
     mm1_video_character_changed();
     cyc_video_set_mode(on?aspect:NES_VIDEO_STOCK);
+    mm1_coop_view_policy();
     if(!on)memset(&ws,0,sizeof ws);
 }
 void mm1_video_character_changed(void) {
     int character=mm1_proto_available()||mm1_charge_available()||mm1_slide_available()||mm1_coop_available();
     for(size_t i=0;i<sizeof(hook_ids)/sizeof(hook_ids[0]);i++)
-        nes_mod_set_function_hook_enabled(hook_ids[i],enabled||(character&&(i==0||i==1||i==2||i==6))||
+        nes_mod_set_function_hook_enabled(hook_ids[i],enabled||mm1_coop_independent()||(character&&(i==0||i==1||i==2||i==6))||
             (mm1_weapon_cycle_available()&&(i==2||i==6)));
+#ifdef MM1_PROFILE_USA
+    nes_mod_set_function_hook_enabled("mm1.coop.spawn-candidate",mm1_coop_independent());
+    nes_mod_set_function_hook_enabled("mm1.coop.view-hud",mm1_coop_independent());
+#endif
     cyc_render_capture_background(character!=0);
     cyc_render_set_stock_compositing(character!=0);
     cyc_render_set_compositor(enabled||character?render:NULL,NULL);
@@ -216,7 +224,7 @@ static bool option(void *ctx,const char *name,const char *value) {
     if(!strcmp(name,"--widescreen-report")) {report=fopen(value,"w");return report!=NULL;}
     return false;
 }
-static void power_on(void *ctx) {(void)ctx;memset(&ws,0,sizeof ws);report_frame=0;game_reset();}
+static void power_on(void *ctx) {(void)ctx;memset(&ws,0,sizeof ws);report_frame=0;game_reset();game_views_reset();}
 static int save_packets(uint8_t *buf,int cap) {
     if(cap<(int)sizeof ws)return -1;memcpy(buf,&ws,sizeof ws);return sizeof ws;
 }
@@ -304,7 +312,7 @@ static void tcp_setup(void *ctx) {
     cyc_tcp_register("ws_oam","test fixture: latched OAM and its signed placement",tcp_oam);
 }
 static void frame_end(void *ctx) {
-    uint64_t frame=++report_frame;(void)ctx;if(enabled)game_frame_end();if(!report || frame%120)return;
+    uint64_t frame=++report_frame;(void)ctx;if(enabled||mm1_coop_independent())game_frame_end();if(!report || frame%120)return;
     verify_map();char extra[1200];game_debug(extra,sizeof extra);
     fprintf(report,"{\"frame\":%llu,\"scene\":%d,\"camera\":%d,\"sprites\":%d,\"spawns\":%llu,\"retains\":%llu,\"failures\":%llu,\"overflow\":%llu,\"terrain_samples\":%d,\"terrain_errors\":%d,%s}\n",
         (unsigned long long)frame,game_valid(),game_camera(),ws.display.count,(unsigned long long)spawns,(unsigned long long)retains,
@@ -322,6 +330,10 @@ NES_MOD_CONSTRUCTOR(register_widescreen) {
     nes_mod_register_reset_callback(reset_mod);
     nes_mod_register_activation_plugin(WS_PLUGIN,activate);
     for(size_t i=0;i<sizeof(hook_ids)/sizeof(hook_ids[0]);i++)nes_mod_register_function_entry_plugin(hook_ids[i],hook_addrs[i],hook);
+#ifdef MM1_PROFILE_USA
+    nes_mod_register_function_entry_plugin("mm1.coop.spawn-candidate",MM_SPAWN_OBJECT,hook);
+    nes_mod_register_function_entry_plugin("mm1.coop.view-hud",0xD36E,hook);
+#endif
     nes_mod_register_savestate_hook(WS_PLUGIN ".packets",save_packets,load_packets);
     nes_mod_register_savestate_validator(WS_PLUGIN ".packets",validate_packets);
 }

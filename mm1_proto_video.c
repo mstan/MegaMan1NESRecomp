@@ -52,7 +52,7 @@ void mm1_proto_draw_begin(void) {
     memset(video.building_shot,0,sizeof video.building_shot);
     memset(&video.building_dust,0,sizeof video.building_dust);
     int x,y,right,age;if(mm1_slide_dust(&x,&y,&right,&age)) {
-        DustFrame *d=&video.building_dust;d->on=1;d->x=(int16_t)(x-(R(0x1B)*256+R(0x1A)));
+        DustFrame *d=&video.building_dust;d->on=1;d->x=(int16_t)(x-mm1_coop_draw_camera());
         d->y=(int16_t)y;d->right=(uint8_t)right;d->age=(uint8_t)age;
     }
 }
@@ -61,7 +61,7 @@ void mm1_proto_pose_begin(void) {
     if(mm1_charge_available()&&actor>=2&&actor<=4) {
         ShotFrame *f=&video.building_shot[actor-2];int sprite=mm1_charge_sprite(actor);
         f->replace=(uint8_t)(sprite>=0);f->sprite=(uint8_t)(sprite<0?0:sprite);
-        f->x=(int16_t)((R(0x460+actor)*256+R(0x480+actor))-(R(0x1B)*256+R(0x1A)));
+        f->x=(int16_t)((R(0x460+actor)*256+R(0x480+actor))-mm1_coop_draw_camera());
         f->y=(int16_t)(R(0x600+actor)+1);f->right=(uint8_t)((R(0x420+actor)&64)!=0);return;
     }
     if((!mm1_proto_available()&&!mm1_slide_available())||R(0x0C)||R(0x31)>=10||
@@ -77,7 +77,7 @@ void mm1_proto_pose_begin(void) {
         if(R(ptr+(R(0x440)>>4)+1)==0x19)f->replace=0;
     }
     f->pose=(uint8_t)(pose<0?0:pose);
-    f->x=(int16_t)((R(0x460)*256+R(0x480))-(R(0x1B)*256+R(0x1A)));
+    f->x=(int16_t)((R(0x460)*256+R(0x480))-mm1_coop_draw_camera());
     f->y=(int16_t)(R(0x600)+1+mm1_proto_beam_offset());
     f->right=(uint8_t)mm1_proto_right();f->weapon=(uint8_t)mm1_weapon_identity();
     f->proto=(uint8_t)mm1_proto_selected();f->teleport=(uint8_t)mm1_proto_teleporting();

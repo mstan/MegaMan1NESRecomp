@@ -968,7 +968,7 @@ static void set_enabled(int on) {
 #ifndef MM1_PROFILE_USA
     on=0;
 #endif
-    enabled=on!=0;if(enabled)mm1_proto_coop_enable();
+    enabled=on!=0;mm1_proto_coop_enable(enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.death",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.room-next",enabled);nes_mod_set_function_hook_enabled("mm1.coop.room-previous",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.room-gate",enabled);
@@ -1081,6 +1081,14 @@ static bool option(void *ctx,const char *name,const char *value) {
     if(strcmp(name,"--coop"))return false;if(strcmp(value,"on")&&strcmp(value,"off"))return false;
     set_enabled(!strcmp(value,"on"));return enabled==!strcmp(value,"on");
 }
+static void reset(void){view_mode=wait_both=roster=0;set_enabled(0);}
+static void activate(void) {
+    const char *package="mega-man-usa.coop";char value[32]="shared";
+    nes_mod_option_value(package,"coop","coop-view",value,sizeof value);option(NULL,"--coop-view",value);
+    strcpy(value,"megaman");nes_mod_option_value(package,"coop","player-one",value,sizeof value);option(NULL,"--coop-p1",value);
+    strcpy(value,"off");nes_mod_option_value(package,"coop","wait-both",value,sizeof value);option(NULL,"--coop-wait-both",value);
+    set_enabled(1);
+}
 static void tcp_view(int id,const char *line) {
     char value[16];if(!cyc_tcp_str(line,"view",value,sizeof value)){cyc_tcp_err(id,"coop_view: view shared|split|p1|p2");return;}
     if(C.initialized&&((strcmp(value,"shared")!=0)!=mm1_coop_independent())){cyc_tcp_err(id,"The running game keeps its shared/separate simulation profile");return;}
@@ -1089,7 +1097,7 @@ static void tcp_view(int id,const char *line) {
 }
 static void tcp_setup(void *ctx){(void)ctx;cyc_tcp_register("coop_view","local co-op layout: view shared|split|p1|p2",tcp_view);}
 const CycHostExtras *mm1_coop_extras(void) {
-    static const CycHostOption options[]={{"--coop",true,"on|off: development co-op controller slice"},
+    static const CycHostOption options[]={{"--coop",true,"on|off: simultaneous Mega Man and Proto Man"},
         {"--coop-p1",true,"megaman|protoman: complementary character roster"},
         {"--coop-view",true,"shared|split|p1|p2: co-op view"},
         {"--coop-wait-both",true,"on|off: wait for both players at native room links (default off)"},
@@ -1100,6 +1108,7 @@ const CycHostExtras *mm1_coop_extras(void) {
 }
 NES_MOD_CONSTRUCTOR(register_mm1_coop) {
 #ifdef MM1_PROFILE_USA
+    nes_mod_register_reset_callback(reset);nes_mod_register_activation_plugin("mm1.coop",activate);
     if(!nes_mod_register_function_entry_plugin("mm1.coop.death",0xC219,death)||
        !nes_mod_register_function_entry_plugin("mm1.coop.draw-part",0xD293,draw_part)||
        !nes_mod_register_savestate_hook("mm1.coop",get,put)||

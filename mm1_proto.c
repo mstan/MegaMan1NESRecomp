@@ -20,7 +20,7 @@
 #define R(a) cyc_mod_peek((uint16_t)(a))
 #define W(a,v) cyc_mod_poke((uint16_t)(a),(uint8_t)(v))
 static CycProtoAtlas atlas;
-static int loaded,enabled,real_mode=1,start_proto=1;
+static int loaded,enabled,requested,coop_required,real_mode=1,start_proto=1;
 static FILE *report;
 typedef struct {
     char magic[4];
@@ -50,7 +50,8 @@ static int load_art(void) {
     if(!loaded)fprintf(stderr,"Proto Man: %s\n",why);
     return loaded;
 }
-static void set_enabled(int on) {
+static void apply_enabled(void) {
+    int on=requested||coop_required;
 #ifndef MM1_PROFILE_USA
     on=0;
 #endif
@@ -63,7 +64,8 @@ static void set_enabled(int on) {
     mm1_reflect_configure(enabled&&real_mode);
     mm1_controls_refresh();mm1_video_character_changed();
 }
-void mm1_proto_coop_enable(void){set_enabled(1);}
+static void set_enabled(int on){requested=on!=0;apply_enabled();}
+void mm1_proto_coop_enable(int on){coop_required=on!=0;apply_enabled();}
 void mm1_proto_stage_enter(void){for(int i=0;i<2;i++)states[i].teleport=states[i].pending=states[i].previous=0;mm1_reflect_stage_enter();}
 static void sound(uint8_t track) {
     int n=R(0x45);if(n<16){W(0x580+n,track);W(0x45,n+1);}
@@ -214,7 +216,7 @@ static int put(const uint8_t *in,int len) {
     memset(states,0,sizeof states);if(len)memcpy(states,in,sizeof states);return 1;
 }
 static int pose_done(uint16_t address){(void)address;mm1_proto_pose_done();return 0;}
-static void reset(void){set_enabled(0);real_mode=1;start_proto=1;}
+static void reset(void){coop_required=0;set_enabled(0);real_mode=1;start_proto=1;}
 static void activate(void) {
     char value[32]="protoman";
     nes_mod_option_value("mega-man-usa.character.protoman","protoman","mode",value,sizeof value);

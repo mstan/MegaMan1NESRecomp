@@ -26,6 +26,9 @@ static void frame_end(void *ctx) {
 static bool option(void *ctx,const char *name,const char *value) {
     (void)ctx;if(!strcmp(name,"--slowdown-report")){report=fopen(value,"w");return report!=NULL;}
     if(strcmp(name,"--slowdown")||(strcmp(value,"on")&&strcmp(value,"off")))return false;
+#ifndef MM1_PROFILE_USA
+    if(!strcmp(value,"on"))return false;
+#endif
     select_lines(!strcmp(value,"on")?262:0);return true;
 }
 static void reset(void){select_lines(0);}

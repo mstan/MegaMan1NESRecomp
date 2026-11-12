@@ -2,7 +2,7 @@
 #include "cyc_host_extras.h"
 #include "cyc_protoman_atlas.h"
 int mm1_proto_available(void);
-void mm1_proto_coop_enable(void);
+void mm1_proto_coop_enable(int on);
 int mm1_proto_selected(void);
 int mm1_proto_teleporting(void);
 int mm1_proto_dispatch(void);

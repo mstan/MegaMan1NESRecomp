@@ -131,7 +131,12 @@ void mm1_sprites_draw(uint32_t *out,int width,int origin,int camera,int hud_seat
             paint_part(&F.parts[i],out,width,origin-camera,opaque);
     }
 }
-static void set_enabled(int on){enabled=on;extern void mm1_video_character_changed(void);mm1_video_character_changed();}
+static void set_enabled(int on){
+#ifndef MM1_PROFILE_USA
+    on=0;
+#endif
+    enabled=on;extern void mm1_video_character_changed(void);mm1_video_character_changed();
+}
 static void reset(void){set_enabled(0);}
 static void activate(void){set_enabled(1);}
 static void power_on(void *ctx){(void)ctx;memset(&B,0,sizeof B);memset(&F,0,sizeof F);}
@@ -139,7 +144,7 @@ static void frame_end(void *ctx){(void)ctx;if(report)fprintf(report,"{\"frame\":
 static bool option(void *ctx,const char *name,const char *value) {
     (void)ctx;if(!strcmp(name,"--flicker-report")){report=fopen(value,"w");return report!=NULL;}
     if(strcmp(name,"--no-flicker")||(strcmp(value,"on")&&strcmp(value,"off")))return false;
-    set_enabled(!strcmp(value,"on"));return true;
+    set_enabled(!strcmp(value,"on"));return enabled==!strcmp(value,"on");
 }
 const CycHostExtras *mm1_sprites_extras(void) {
     static const CycHostOption options[]={{"--no-flicker",true,"on|off: draw complete native sprites"},{"--flicker-report",true,"FILE: sprite packet observations"}};

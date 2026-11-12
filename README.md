@@ -115,8 +115,12 @@ complete native actor art with stable player priority. A crowded scene needs
 uncrowded native image. Targeted checks cover both character rosters, charged
 shots and slides, all independent views, native HUD placement and current-build
 state/audio continuation.
-Full-stage transition coverage and online play are still being implemented;
-the Co-op package is not exposed in the Mods catalog yet.
+Co-op is available in Mods with character roster, view and room-transition
+choices. It retains the required character support regardless of command-line
+option order, and disabling co-op restores the requested solo character choice.
+Targeted catalog checks cover both default enhancements, the selected split
+view and roster, and current-build state/audio continuation. Full-stage
+transition coverage and online play are still being implemented.
 
 ## Cycle backend migration branch
 

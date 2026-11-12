@@ -20,6 +20,9 @@ Current checks cover native/interpreter agreement, Fit sprite placement,
 current-build state replay and native enemy/boss collision paths.
 The native inventory keeps its panel geometry and life count with the selected
 character's 16x16 portrait.
+Airborne firing uses the corrected shared cannon baseline and matching native
+Buster origin. Solo and second-player checks cover both directions, exact
+presented pixels, unchanged movement/audio and current-build continuation.
 
 The optional slide and charged Buster read graphics, timing and sounds from your
 Mega Man 4 (USA) ROM at launch. Both characters share these abilities. Down + A

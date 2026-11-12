@@ -2,6 +2,7 @@
 #include <stdint.h>
 void mm1_proto_video_reset(void);
 void mm1_proto_video_debug(char *out,int cap);
+void mm1_video_debug_seat(int seat,char *out,int cap);
 void mm1_proto_draw_begin(void);
 void mm1_proto_pose_begin(void);
 void mm1_proto_part_emitted(int slot);

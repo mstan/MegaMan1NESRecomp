@@ -100,7 +100,7 @@ int mm1_proto_muzzle_y(int native_offset) {
     int offset=native_offset;
     if(mm1_proto_selected()&&!mm1_weapon_identity()) {
         int type=R(0x400);
-        offset=(type==9||type==10||type==0x6F)?-5:
+        offset=(type==9||type==10||type==0x6F)?3:
             (type>=21&&type<=24)||type==0x70?-4:3;
         if(type==6||type==7||type==12) {
             static const uint8_t phases[]={0,1,2,1};

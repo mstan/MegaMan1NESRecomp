@@ -43,6 +43,11 @@ void mm1_proto_video_debug(char *out,int cap) {
     snprintf(out,(size_t)cap,"\"pose\":%u,\"mask\":%llu,\"anchor\":[%d,%d],\"picture\":%d",
         f->pose,(unsigned long long)f->mask,f->x,f->y,valid_picture());
 }
+void mm1_video_debug_seat(int seat,char *out,int cap) {
+    const BodyFrame *f=&videos[seat&1].shown;
+    snprintf(out,(size_t)cap,"\"pose\":%u,\"mask\":%llu,\"anchor\":[%d,%d],\"right\":%u",
+        f->pose,(unsigned long long)f->mask,f->x,f->y,f->right);
+}
 
 static void restore_invulnerability(void) {
     if(video.restoring){W(0x55,video.invulnerability);video.restoring=0;}

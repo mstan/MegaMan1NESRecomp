@@ -989,7 +989,13 @@ static void frame_end(void *ctx) {
         for(int a=0x62;a<=0x66;a++)fprintf(report,"%s%u",a==0x62?"":",",mm1_coop_read(seat,(uint16_t)a));
         fputs("],\"actor\":[",report);
         for(int field=0;field<16;field++)fprintf(report,"%s%u",field?",":"",mm1_coop_read(seat,(uint16_t)actor_field(field,5)));
-        fputs("]}",report);
+        char art[160];mm1_video_debug_seat(seat,art,sizeof art);
+        fprintf(report,"],\"body\":[%u,%u,%u,%u,%u],\"buster\":[",
+            mm1_coop_read(seat,0x400),mm1_coop_read(seat,0x640),mm1_coop_read(seat,0x420),
+            mm1_coop_read(seat,0x480),mm1_coop_read(seat,0x600));
+        for(int slot=2;slot<5;slot++)fprintf(report,"%s[%u,%u,%u]",slot==2?"":",",
+            mm1_coop_read(seat,(uint16_t)(0x400+slot)),mm1_coop_read(seat,(uint16_t)(0x480+slot)),mm1_coop_read(seat,(uint16_t)(0x600+slot)));
+        fprintf(report,"],\"art\":{%s}}",art);
     }char menu[512];mm1_coop_menu_debug(menu,sizeof menu);
     fprintf(report,"],\"shown_owner\":%u,\"guest_owner\":%u,\"intro\":%u,\"blast\":[%u,%u],\"withdrawn\":%u,\"teleport\":[%u,%u],\"hold\":[%u,%u],\"withdrawals\":[%llu,%llu],\"rejoins\":[%llu,%llu],\"revivals\":[%llu,%llu],\"wait_both\":%d,\"waiting\":%u,%s}\n",
         C.shown_owner,C.shown_guest_owner,C.intro_picture,C.players[0].blast_ticks,C.players[1].blast_ticks,C.withdrawn,

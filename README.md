@@ -84,6 +84,9 @@ the partner follows the original scroll while keeping personal health and ammo.
 Targeted checks cover both leaders, a distant initiator at the original aspect,
 the native terrain ring, and mid-scroll state/audio continuation. A pit kills
 only that character while the survivor continues, without spending a shared life.
+The native Cut Man shutters also accept a distant second-player initiator and
+bring both characters through the corridor and into the boss room. Their
+original shutter animation and mid-scroll state/audio continuation are checked.
 Guest movement keeps native collision without streaming another background into
 the main player's view; native weapon changes still update the shared blocks.
 Full-stage transition coverage and online play are still being implemented;

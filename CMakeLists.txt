@@ -74,6 +74,7 @@ if(NESRECOMP_BACKEND STREQUAL "cycle")
             "${CMAKE_CURRENT_SOURCE_DIR}/mm1_weapon_gfx.c"
             "${CMAKE_CURRENT_SOURCE_DIR}/mm1_coop_menu.c"
             "${CMAKE_CURRENT_SOURCE_DIR}/mm1_slowdown.c"
+            "${CMAKE_CURRENT_SOURCE_DIR}/mm1_sprites.c"
             "${NESRECOMP_ROOT}/runner/cyc/cyc_protoman_atlas.c"
             "${NESRECOMP_ROOT}/runner/cyc/cyc_mm4_donor.c"
             "${NESRECOMP_ROOT}/runner/cyc/cyc_mm4_audio.c"

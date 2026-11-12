@@ -40,6 +40,7 @@ typedef struct {
     char magic[4];uint8_t on,initialized,stage,current,in_guest,drawing,roster,anchor,independent;
     Player players[2];Picture building,shown,view_build[2],view_shown[2];uint8_t oam[256];
     uint8_t view_ready,view_drawing,view_visible,room_follow,skip_controller;
+    uint8_t art_valid,art_anim[2][16],art_fire[2][16],art_life[2][16];
     uint8_t wait_mode,waiting,wait_direction[2],wait_screen[2],wait_y[2],wait_flags[2];uint16_t wait_camera[2];
     uint64_t draw_mask;uint8_t draw_oam[256];
     uint64_t primary_build_mask;uint8_t primary_oam[256];int16_t insert_slot;uint8_t primary_cursor,primary_seen,pair_ready;
@@ -166,6 +167,23 @@ int mm1_coop_spawn_project(int seat) {
     if(!cyc_mod_isolated()||!enabled||!C.initialized||seat<0||seat>1)return 0;
     if(seat!=C.current)project(&C.players[seat]);return 1;
 }
+int mm1_coop_art_project(int seat) {
+    if(!cyc_mod_isolated()||!enabled||seat<0||seat>1)return -1;
+    int previous=C.current;if(C.initialized&&seat!=previous)project(&C.players[seat]);C.current=(uint8_t)seat;
+    /* Private draws already advanced these native animation counters. A pure
+       complete draw must use the inputs of that actual displayed picture. */
+    if((C.art_valid&(1u<<seat))&&(seat!=C.anchor||mm1_coop_independent_scene()))
+        for(int actor=0;actor<16;actor++)if(actor!=1) {
+            W(0x440+actor,C.art_anim[seat][actor]);W(0x640+actor,C.art_fire[seat][actor]);W(0x6A0+actor,C.art_life[seat][actor]);
+        }
+    return previous;
+}
+static void capture_art(void) {
+    int seat=C.current;C.art_valid|=(uint8_t)(1u<<seat);
+    for(int actor=0;actor<16;actor++)if(actor!=1) {
+        C.art_anim[seat][actor]=R(0x440+actor);C.art_fire[seat][actor]=R(0x640+actor);C.art_life[seat][actor]=R(0x6A0+actor);
+    }
+}
 static void personal(Player *p,unsigned address,unsigned value){if(indices[address])p->ram[indices[address]-1]=(uint8_t)value;}
 int mm1_coop_read(int seat,uint16_t address) {
     if(seat<0||seat>1||address>=2048)return 0;
@@ -211,7 +229,7 @@ static void initialize(void) {
     int x=R(0x460)*256+R(0x480),left=R(0x1B)*256+R(0x1A);x-=24;if(x<left+16)x=left+16;
     personal(&C.players[1],0x460,x>>8);personal(&C.players[1],0x480,x);personal(&C.players[1],0x4A0,0);
     for(int slot=2;slot<16;slot++)personal(&C.players[1],0x600+slot,248);
-    C.initialized=1;C.stage=R(0x31);C.building.mask=0;if(!C.intro_picture)C.shown.mask=0;C.pair_ready=0;C.intro_picture=0;
+    C.initialized=1;C.art_valid=0;C.stage=R(0x31);C.building.mask=0;if(!C.intro_picture)C.shown.mask=0;C.pair_ready=0;C.intro_picture=0;
     C.build_owner=C.shown_owner=0;C.building_guest_owner=C.shown_guest_owner=1;
     C.wiping=C.restarting=C.game_over=C.pending_wipe=0;project(&C.players[0]);
     C.withdrawn=C.revive_pending=0;memset(C.select_hold,0,sizeof C.select_hold);memset(C.select_armed,0,sizeof C.select_armed);
@@ -241,6 +259,7 @@ static int private_call(uint16_t address,CycModRegs *regs,int limit,int hooks) {
     int shooting=address==0xA35C,weapon_world=shooting||address==0x94A8;if(shooting)W(0x2F,0);
     C.in_guest=1;C.drawing=(uint8_t)(address==0xD131);
     if(C.drawing) {
+        capture_art();
         C.building_guest_owner=C.current;
         memset(&C.building,0,sizeof C.building);C.draw_mask=0;
         int camera=R(0x460)*256+R(0x480)-128,left=R(0x27)*256,right=R(0x28)*256;
@@ -304,6 +323,7 @@ static void draw_view_player(int seat,int freeze) {
         mm1_proto_draw_begin();
         uint8_t life[16];for(int slot=0;slot<16;slot++)life[slot]=R(0x6A0+slot);
         if(freeze)for(int slot=0;slot<16;slot++)if(slot!=1)W(0x6A0+slot,life[slot]+1);
+        capture_art();
         for(int n=0;n<16&&ok&&!private_full;n++) {
             int actor=(R(0x23)&1)?n:15-n;if(actor==1||R(0x600+actor)>=248)continue;
             int camera=R(0x460+actor)*256+R(0x480+actor)-128;
@@ -816,7 +836,7 @@ static int script_owner(uint16_t address) {
 }
 void mm1_coop_stage_enter(void) {
     mm1_coop_menu_cancel();
-    mm1_world_cancel_rebase();C.skip_controller=0;
+    mm1_world_cancel_rebase();C.skip_controller=C.art_valid=0;
     C.restarting=(uint8_t)(C.wiping&&!C.game_over);C.initialized=0;C.wiping=C.pending_wipe=0;
     if(enabled)for(int seat=0;seat<2;seat++){C.current=(uint8_t)seat;mm1_charge_stage_enter();mm1_slide_stage_enter();}
     C.current=C.anchor=C.build_owner=C.shown_owner=0;C.building_guest_owner=C.shown_guest_owner=1;C.intro_picture=0;
@@ -1011,10 +1031,10 @@ static void frame_end(void *ctx) {
         (unsigned long long)C.revivals[0],(unsigned long long)C.revivals[1],wait_both,C.waiting,menu);
     }
 }
-static int get(uint8_t *out,int cap){if(cap<(int)sizeof C)return -1;memcpy(C.magic,"MCOB",4);C.on=(uint8_t)enabled;C.roster=(uint8_t)roster;C.independent=(uint8_t)mm1_coop_independent();C.wait_mode=(uint8_t)wait_both;memcpy(out,&C,sizeof C);return sizeof C;}
+static int get(uint8_t *out,int cap){if(cap<(int)sizeof C)return -1;memcpy(C.magic,"MCOC",4);C.on=(uint8_t)enabled;C.roster=(uint8_t)roster;C.independent=(uint8_t)mm1_coop_independent();C.wait_mode=(uint8_t)wait_both;memcpy(out,&C,sizeof C);return sizeof C;}
 static int valid(const uint8_t *in,int len) {
     if(!len)return !enabled;if(!in||len!=sizeof C)return 0;Coop n;memcpy(&n,in,sizeof n);
-    if(memcmp(n.magic,"MCOB",4)||n.on!=enabled||n.roster!=roster||n.independent!=mm1_coop_independent()||n.wait_mode!=wait_both||n.waiting>2||n.initialized>1||n.current>1||n.anchor>1||n.in_guest||n.drawing||n.room_follow>3||n.skip_controller>1||
+    if(memcmp(n.magic,"MCOC",4)||n.on!=enabled||n.roster!=roster||n.independent!=mm1_coop_independent()||n.wait_mode!=wait_both||n.waiting>2||n.initialized>1||n.current>1||n.anchor>1||n.in_guest||n.drawing||n.room_follow>3||n.skip_controller>1||n.art_valid>3||
         n.players[0].dead>1||n.players[1].dead>1||n.primary_seen>1||n.insert_slot< -1||n.insert_slot>=64)return 0;
     if(n.wiping>1||n.restarting>1||n.game_over>1||n.pending_wipe>1||n.wipe_owner>1||n.checkpoint>2)return 0;
     if(n.build_owner>1||n.shown_owner>1||n.building_guest_owner>1||n.shown_guest_owner>1||n.intro_picture>1)return 0;

@@ -19,6 +19,7 @@ def main():
     p.add_argument('--pool-retry',action='store_true',help='A full native pool must retry a peer-view constructor after a slot is free')
     p.add_argument('--projectile-crossing',action='store_true',help='A native player shot must cross the primary window into the peer grid')
     p.add_argument('--scroll-ownership',action='store_true',help='A distant moving guest must preserve the main native terrain ring')
+    p.add_argument('--complete-sprites',action='store_true')
     a=p.parse_args();a.exe=a.exe.resolve();a.out.mkdir(parents=True,exist_ok=True)
     lines=['0 -','0 2:-','180 START','181 -','360 START','361 -','1300 POKE 005D FE',
         '1420 X2:R','1421 X2:-','1432 X2:R','1433 X2:-','1510 2:B','1511 2:-']
@@ -36,7 +37,8 @@ def main():
     env=dict(os.environ,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy',NESRECOMP_NO_LAUNCHER='1')
     base=[str(a.exe),str(a.rom.resolve()),'--frames','1540','--input',str(route),
         '--protoman','off','--coop','on','--charge','off','--slide','off',
-        '--weapon-cycle','on','--widescreen','off','--no-save','--config',str(a.out/'test.ini'),*pokes]
+        '--weapon-cycle','on','--widescreen','off','--no-save','--config',str(a.out/'test.ini'),
+        *(['--no-flicker','on'] if a.complete_sprites else []),*pokes]
     def run(name,mode='split',extra=()):
         with (a.out/(name+'.log')).open('w') as log:subprocess.run(base+[
             '--coop-view',mode,'--coop-report',str(a.out/(name+'.jsonl')),

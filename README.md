@@ -109,6 +109,12 @@ the sound chip paused during that extra work. It defaults to on in a fresh
 Mods catalog; `--slowdown off` retains the original timing. A dense native
 co-op fixture reduces skipped updates from 43 to zero over 100 frames, with
 the audio sample rate and current-build state/audio continuation checked.
+No sprite flicker also defaults to on in a fresh Mods catalog. It draws
+complete native actor art with stable player priority. A crowded scene needs
+96 parts beyond the console's 64-part page; the completed object matches its
+uncrowded native image. Targeted checks cover both character rosters, charged
+shots and slides, all independent views, native HUD placement and current-build
+state/audio continuation.
 Full-stage transition coverage and online play are still being implemented;
 the Co-op package is not exposed in the Mods catalog yet.
 

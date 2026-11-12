@@ -17,6 +17,7 @@
 #include "mm1_slide.h"
 #include "mm1_coop.h"
 #include "mm1_coop_menu.h"
+#include "mm1_sprites.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -103,11 +104,17 @@ static int render_inner(uint32_t *out,int width,int height,int x0,const uint32_t
     (void)user;(void)height;
     static uint32_t character[256*240];
     int menu=mm1_coop_menu_active();
-    int replaced=menu?cyc_render_background(character):mm1_proto_native_picture(character);
+    int full=mm1_sprites_ready()&&game_present_valid()&&!menu;
+    int replaced=menu||full?cyc_render_background(character):mm1_proto_native_picture(character);
     if(replaced)native=character;
     if(!enabled || !game_present_valid() || !(cyc_render_line_mask(80)&8)) {
         if(!replaced)return 0;
         for(int y=0;y<240;y++)memcpy(out+y*width+x0,native+y*256,256*sizeof *out);
+        if(full) {
+            memset(coverage,0,(size_t)width*240);
+            for(int y=0;y<240;y++)memcpy(coverage+y*width+x0,cyc_frame_bg_opaque()+y*256,256);
+            mm1_sprites_draw(out,width,x0,game_camera(),-1,enabled?-16:x0,coverage);
+        }
         return 1;
     }
     camera_x=unwrap(cyc_render_line_scroll_x(80),game_camera(),WS_SCROLL_PERIOD);
@@ -144,6 +151,7 @@ static int render_inner(uint32_t *out,int width,int height,int x0,const uint32_t
     /* Signed packets also repaint selected native pixels when byte-X sprites
      * have wrapped or the console's column guards interrupt the wide view. */
     if(menu)return 1;
+    if(full){mm1_sprites_draw(out,width,x0,camera_x,-1,-16,coverage);return 1;}
     mm1_video_paint_dust(out,width,x0,coverage);
     for(int i=ws.display.count-1;i>=0;i--) {
         WsSprite *s=&ws.display.tile[i];
@@ -191,7 +199,7 @@ static void enable(int on) {
     if(!on)memset(&ws,0,sizeof ws);
 }
 void mm1_video_character_changed(void) {
-    int character=mm1_proto_available()||mm1_charge_available()||mm1_slide_available()||mm1_coop_available();
+    int character=mm1_proto_available()||mm1_charge_available()||mm1_slide_available()||mm1_coop_available()||mm1_sprites_enabled();
     for(size_t i=0;i<sizeof(hook_ids)/sizeof(hook_ids[0]);i++)
         nes_mod_set_function_hook_enabled(hook_ids[i],enabled||mm1_coop_independent()||(character&&(i==0||i==1||i==2||i==6))||
             (mm1_weapon_cycle_available()&&(i==2||i==6)));

@@ -89,8 +89,7 @@ static void game_dma(void) {
     /* Native HUD tiles are screen-space, never world-space actors. */
     for(int i=0;i<64;i++) {
         int a=0x200+i*4,x=R(a+3),y=R(a),tile=R(a+1),attr=R(a+2);
-        if(y<24 || y>72)continue;
-        if((tile>=0xFA && tile<=0xFE && ((x==24 && attr==1) || (x==40 && attr==2))) || (tile>=0xDB && tile<=0xDF && x==16 && attr==0)) {
+        if(mm1_sprites_hud_margin(x,y,tile,attr)) {
             ws.build_oam_kind[i]=2;ws.build_oam_x[i]=(int16_t)(x-16);
         }
     }
@@ -297,7 +296,7 @@ static int hook(uint16_t addr) {
         if(addr==MM_EMIT){CycModRegs r={0};cyc_mod_regs(&r);mm1_proto_part_emitted(r.x/4+1);}
         return 0;
     }
-    if(addr==MM_DMA0){apply_camera_rebase();int previous=mm1_coop_dma_begin();mm1_weapon_gfx_latch();if(!mm1_coop_independent_scene())mm1_proto_draw_latch();mm1_coop_video_latch();game_views_latch();
+    if(addr==MM_DMA0){apply_camera_rebase();int previous=mm1_coop_dma_begin();mm1_weapon_gfx_latch();if(!mm1_coop_independent_scene())mm1_proto_draw_latch();mm1_coop_video_latch();game_views_latch();mm1_sprites_latch();
         mm1_coop_present_end(previous);if(enabled||mm1_coop_independent())dma_packet();return 0;}
     if(addr==MM_BUILD){
         mm1_coop_intro_draw();
@@ -307,6 +306,7 @@ static int hook(uint16_t addr) {
         mm1_slide_restore_input();
         if(mm1_coop_independent_scene())mm1_coop_views_draw();else mm1_proto_draw_begin();
         game_views_build();
+        mm1_sprites_build();
         ws.build.count=0;memset(ws.build_oam_kind,0,sizeof ws.build_oam_kind);draw_pending=0;return 0;
     }
     if(addr==MM_DRAW){mm1_coop_primary_body();if(mm1_coop_draw_suppressed()&&(R(0x0C)==0||(R(0x0C)>=2&&R(0x0C)<16)))return 1;
@@ -408,6 +408,7 @@ static void view_scene(uint32_t *out,int seat) {
         out[at]=cyc_render_color(v?view_shown.palette[seat][row/8][cell]*4+v:0);coverage[at]=(uint8_t)(v!=0);
     }
     if(mm1_coop_menu_active()){mm1_coop_menu_draw(out,256,seat);return;}
+    if(mm1_sprites_ready()){mm1_sprites_draw(out,256,0,left,seat,0,coverage);return;}
     if(!view_shown.odd)view_hud_paint(out,seat);
     for(int n=0;n<32;n++) {
         int actor=view_shown.odd?31-n:n;

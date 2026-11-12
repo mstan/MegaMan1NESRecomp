@@ -1,0 +1,24 @@
+format_version = 1
+id = "mega-man-usa.enhancement.no-flicker"
+version = "1.0.0"
+name = "Mega Man No Sprite Flicker"
+author = "NESRecomp"
+description = "Draw complete native sprites in busy gameplay scenes."
+license = "PolyForm-Noncommercial-1.0.0"
+resolver = "declarative"
+save_compatibility = "custom"
+
+[[target]]
+game_id = "mega-man-usa"
+rom_crc32 = "6ee4bb0a"
+
+[[feature]]
+id = "no-flicker"
+name = "No sprite flicker"
+description = "Draw complete gameplay sprites beyond the original sprite limits. Turn off for the original rendering."
+group = "Display"
+default_enabled = true
+
+[[plugin]]
+feature = "no-flicker"
+id = "mm1.no-flicker"

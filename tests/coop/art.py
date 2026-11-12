@@ -7,11 +7,13 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     for name in ('rom','donor','exe','out'):p.add_argument('--'+name,type=pathlib.Path,required=True)
     p.add_argument('--priority-only',action='store_true',help='run only the native sprite and priority checks')
+    p.add_argument('--complete-sprites',action='store_true',help='qualify full native packets and their stable player priority')
     a=p.parse_args();a.exe=a.exe.resolve();a.out.mkdir(parents=True,exist_ok=True)
     boot=['0 -','0 2:-','180 START','181 -','360 START','361 -','1400 HOLD 0055 81','1400 HOLD 006A 1C']
     env=dict(os.environ,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy',NESRECOMP_NO_LAUNCHER='1')
     base=[str(a.exe),str(a.rom.resolve()),'--protoman','off','--coop','on','--widescreen','off',
           '--weapon-cycle','on','--charge','off','--slide','off','--no-save','--config',str(a.out/'test.ini')]
+    if a.complete_sprites:base+=['--no-flicker','on']
     def pokes(frame,values):
         result=[]
         for address,value in values.items():result+=['--coop-test-poke',f'{frame}:2:{address:X}:{value:X}']
@@ -108,7 +110,8 @@ def main():
                 if 16<=x<48:player.append(slot)
                 if 48<=x<80:item.append(slot)
         assert player and item,(player,item)
-        front=min(item)<min(player);orders.add(front)
+        native_front=min(item)<min(player);orders.add(native_front)
+        front=False if a.complete_sprites else native_front
         def compare(label):
             nonlocal conflicts
             for y in range(165,192):
@@ -128,10 +131,11 @@ def main():
         compare('blink')
     assert orders=={False,True} and conflicts>5,(orders,conflicts)
     ability=True if not a.priority_only else None
-    summary=dict(result='pass',priority_only=a.priority_only,native_mega_pixels_exact=True,complementary_rosters=True,personal_lr=ability,
+    summary=dict(result='pass',priority_only=a.priority_only,complete_sprites=a.complete_sprites,native_mega_pixels_exact=True,complementary_rosters=True,personal_lr=ability,
         both_guest_characters_share_slide_and_charge=ability,disabled_slide_preserves_native_jump=ability,
         guest_charge_and_shot_state_pcm_exact=ability,native_interpreter_exact=ability,
-        both_native_sprite_orders_exact=True,blink_cursor_priority_exact=True,overlap_color_conflicts=conflicts)
+        both_native_sprite_orders_exact=not a.complete_sprites,fixed_player_priority_both_native_orders_exact=a.complete_sprites,
+        blink_cursor_priority_exact=True,overlap_color_conflicts=conflicts)
     (a.out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary))
 
 if __name__=='__main__':main()

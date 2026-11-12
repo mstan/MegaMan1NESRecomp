@@ -7,6 +7,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     for name in ('rom','exe','out'):p.add_argument('--'+name,type=pathlib.Path,required=True)
     p.add_argument('--slowdown-gate',action='store_true',help='Compare the existing dense native workload with fresh catalog CPU timing')
+    p.add_argument('--flicker-gate',action='store_true',help='Compare complete native art packets with the original OAM-limited scene')
     a=p.parse_args();a.exe=a.exe.resolve();a.out.mkdir(parents=True,exist_ok=True)
     lines=['0 -','0 2:-','180 START','181 -','360 START','361 -','1490 POKE 005D FE',
         '1490 POKE 005F 05','1490 POKE 006F 1C','1490 POKE 0055 81']
@@ -17,25 +18,86 @@ def main():
     for slot in range(16,32):
         actor={0x400:255,0x420:6,0x440:0,0x460:0,0x480:176,0x4A0:0,0x4C0:0,0x4E0:0,
             0x600:176,0x620:0,0x640:127,0x660:0,0x680:0,0x6A0:1,0x6C0:255,0x6E0:0x21}
+        if a.flicker_gate:actor.update({0x480:48+(slot-16)%4*48,0x600:48+(slot-16)//4*40})
         for address,value in actor.items():lines.append(f'1490 HOLD {address+slot:04X} {value:02X}')
-    for frame in range(1500,1600,30):lines += [f'{frame} B',f'{frame} 2:B',f'{frame+1} -',f'{frame+1} 2:-']
-    lines+=['1543 X2:R','1544 X2:-']
+    if not a.flicker_gate:
+        for frame in range(1500,1600,30):lines += [f'{frame} B',f'{frame} 2:B',f'{frame+1} -',f'{frame+1} 2:-']
+        lines+=['1543 X2:R','1544 X2:-']
     route=a.out/'input.txt';route.write_text('\n'.join(sorted(lines,key=lambda s:int(s.split()[0])))+'\n')
     pose.update({0x480:64,0x55:0x81,0x5F:5,0x6F:28});pokes=[]
     for address,value in pose.items():pokes+=['--coop-test-poke',f'1490:2:{address:X}:{value:X}']
     base=[str(a.exe),str(a.rom.resolve()),'--frames','1600','--coop','on','--weapon-cycle','on','--charge','off',
         '--widescreen','fit','--widescreen-enemies','classic','--present-size','1280x720','--input',str(route),
-        *pokes,'--slowdown','off','--no-save','--config',str(a.out/'test.ini')]
+        *pokes,'--slowdown','off','--no-flicker','off','--no-save','--config',str(a.out/'test.ini')]
     env=dict(os.environ,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy',NESRECOMP_NO_LAUNCHER='1')
     def run(name,extra=()):
         with (a.out/(name+'.log')).open('w') as log:
             subprocess.run(base+['--coop-report',str(a.out/(name+'.jsonl')),'--hash-out',str(a.out/(name+'.hash')),
                 '--slowdown-report',str(a.out/(name+'-timing.jsonl')),
+                '--flicker-report',str(a.out/(name+'-sprites.jsonl')),'--screenshot',str(a.out/(name+'-native.png')),
                 '--present-out',str(a.out/(name+'.png')),'--wav-out',str(a.out/(name+'.wav')),*extra],
                 cwd=a.exe.parent,env=env,check=True,stdout=log,stderr=subprocess.STDOUT,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
     states=[a.out/'collision.cycstate',a.out/'pool.cycstate']
     run('native',['--save-state',f'1530:{states[0]}','--save-state',f'1542:{states[1]}','--present-every','1530'])
+    if a.flicker_gate:
+        base[base.index('--no-flicker')+1]='on';state=a.out/'complete.cycstate'
+        catalog=a.out/'fresh-mods';package='packages/mega-man-usa.enhancement.no-flicker/1.0.0/manifest.toml'
+        manifest=catalog/package;manifest.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(a.exe.parent/'mods'/package,manifest)
+        index=base.index('--no-flicker');catalog_base=[v for i,v in enumerate(base) if i not in (index,index+1)]
+        with (a.out/'catalog.log').open('w') as log:subprocess.run(catalog_base+['--mods-root',str(catalog),'--frames','2',
+            '--flicker-report',str(a.out/'catalog-sprites.jsonl')],cwd=a.exe.parent,env=env,check=True,
+            stdout=log,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW)
+        assert all(r['on']==1 for r in map(json.loads,(a.out/'catalog-sprites.jsonl').read_text().splitlines()))
+        run('complete',['--save-state',f'1530:{state}','--present-every','1530'])
+        packets=list(map(json.loads,(a.out/'complete-sprites.jsonl').read_text().splitlines()))
+        last=packets[-1];assert last['ready'] and any(r['overlays'] for r in packets if r['frame']>1490),last
+        fullest=max(r['native_parts'][r['anchor']]+r['hud'][r['anchor']] for r in packets)
+        assert fullest>64,('The native scene did not exceed its physical OAM capacity',fullest)
+        assert (a.out/'native.hash').read_bytes()==(a.out/'complete.hash').read_bytes(),'Native simulation changed'
+        assert (a.out/'native-native.png').read_bytes()==(a.out/'complete-native.png').read_bytes(),'Physical OAM picture changed'
+        assert (a.out/'native.png').read_bytes()!=(a.out/'complete.png').read_bytes(),'No visible completion in the dense scene'
+        width,height,before=pixels(a.out/'native.png');_,_,complete=pixels(a.out/'complete.png');origin=(width-256)//2
+        assert all(before[y][:32*3]==complete[y][:32*3] for y in range(16,80)),'Wide health bars moved'
+        def differences(slot):
+            x=48+(slot-16)%4*48+origin;y=48+(slot-16)//4*40
+            return sum(before[py][px*3:px*3+3]!=complete[py][px*3:px*3+3] for py in range(y-16,y+16) for px in range(x-16,x+16))
+        missing=max(range(16,32),key=differences);assert differences(missing)>0,'Only unrelated pixels changed'
+        def pcm(name):
+            with wave.open(str(a.out/(name+'.wav')),'rb') as f:return f.readframes(f.getnframes())
+        assert pcm('native')==pcm('complete'),'Native audio changed'
+        run('instant',['--load-state',str(state),'--frames','1531'])
+        assert (a.out/'instant.png').read_bytes()==(a.out/'complete_01530.png').read_bytes()
+        run('resume',['--load-state',str(state)])
+        tail=[s for s in (a.out/'complete.hash').read_text().splitlines() if s[:1].isdigit() and int(s.split()[0])>1530]
+        assert tail==(a.out/'resume.hash').read_text().splitlines()
+        assert (a.out/'complete.png').read_bytes()==(a.out/'resume.png').read_bytes()
+        continued=pcm('resume');assert continued and pcm('complete')[-len(continued):]==continued
+        run('interpreter',['--interp-only'])
+        assert (a.out/'complete.hash').read_bytes()==(a.out/'interpreter.hash').read_bytes()
+        assert (a.out/'complete.png').read_bytes()==(a.out/'interpreter.png').read_bytes()
+        assert pcm('complete')==pcm('interpreter')
+        # One original actor drawn without the crowded pool is an independent
+        # native pixel oracle for the object the full page omitted or cut short.
+        original_route=route.read_text();reference=[]
+        for line in lines:
+            fields=line.split();addr=int(fields[2],16) if len(fields)>3 and fields[1] in ('POKE','HOLD') else -1
+            if 0x400<=addr<0x500 or 0x600<=addr<0x700:
+                slot=addr&31
+                if slot>=16 and slot!=missing:continue
+            reference.append(line)
+        for slot in range(16,32):
+            if slot!=missing:reference.append(f'1490 HOLD {0x600+slot:04X} F8')
+        route.write_text('\n'.join(sorted(reference,key=lambda s:int(s.split()[0])))+'\n')
+        base[base.index('--no-flicker')+1]='off'
+        run('reference');route.write_text(original_route)
+        _,_,expected=pixels(a.out/'reference.png');x=48+(missing-16)%4*48+origin;y=48+(missing-16)//4*40
+        different=sum(expected[py][px*3:px*3+3]!=complete[py][px*3:px*3+3] for py in range(y-16,y+16) for px in range(x-16,x+16))
+        assert different==0,('Completed actor differs from its original native image',missing,different)
+        summary=dict(result='pass',native_scene_parts=fullest,physical_capacity=64,native_simulation_oam_audio_unchanged=True,
+            actual_visible_completion=True,native_oracle_actor=missing,native_oracle_pixels_exact=1024,
+            native_interpreter_exact=True,current_state_pixels_pcm_exact=True)
+        (a.out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary));return
     if a.slowdown_gate:
         index=base.index('--slowdown');base[index+1]='on'
         catalog=a.out/'fresh-mods';package='packages/mega-man-usa.enhancement.slowdown/1.0.0/manifest.toml'

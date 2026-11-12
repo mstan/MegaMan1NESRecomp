@@ -67,10 +67,12 @@ Targeted checks cover both directions, jumping off, native beam expiration,
 Fit to screen and current-build state/audio continuation.
 Both players also use the same native moving-platform buffers and carry speed;
 targeted Foot Holder checks cover both rosters and state/audio replay.
-Ordinary native enemy AI targets the nearest living player, with withdrawn
+Native enemy and boss AI target the nearest living player, with withdrawn
 players excluded. Damage reactions retain the actual attacker's equipment.
 Dense native AI checks cover palette preservation and an interrupted update's
 current-build state, immediate image and audio continuation.
+Boss checks also compare native turning and walking with each player nearer,
+retaining personal weapons, ammo and armor colors through state/audio replay.
 `--coop-view shared|split|p1|p2` chooses the development view. Independent views
 use one native 256x240 grid per player, with that player's health, weapon meter
 and usable native inventory. Only the player who paused can resume. Their

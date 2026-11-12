@@ -787,6 +787,26 @@ static int world_next(uint16_t address) {
         }
     }return 0;
 }
+static int boss_ai_begin(uint16_t address) {
+    (void)address;
+    /* Scope only the main loop's gameplay dispatch. The real intro and
+       nonreturning defeat scripts keep their existing native owner. */
+    if(!enabled||!C.initialized||C.wiping||C.world.phase||C.world.ai_active||cyc_mod_isolated()||
+       C.current!=C.anchor||R(0x31)>=10||R(0x3E)<5||!R(0x6C1))return 0;
+    CycModRegs r={0};cyc_mod_regs(&r);
+    unsigned ret=R(0x100|(uint8_t)(r.s+1))|(R(0x100|(uint8_t)(r.s+2))<<8);
+    if(ret!=0x91AC||r.s>253)return 0;
+    int owner=enemy_owner(1);if(owner<0||owner==C.anchor)return 0;
+    capture(&C.players[C.anchor]);C.world.ai_active=1;C.world.ai_slot=1;C.world.ai_stack=r.s;
+    C.current=(uint8_t)owner;project(&C.players[owner]);return 0;
+}
+static int boss_ai_end(uint16_t address) {
+    (void)address;if(!enabled||!C.initialized||cyc_mod_isolated())return 0;
+    World *w=&C.world;CycModRegs r={0};cyc_mod_regs(&r);
+    if(w->ai_active&&w->ai_slot==1&&r.s==(uint8_t)(w->ai_stack+2)) {
+        capture(&C.players[C.current]);w->ai_active=0;C.current=C.anchor;project(&C.players[C.anchor]);
+    }return 0;
+}
 static int magnet_ride(uint16_t address) {
     (void)address;if(!enabled||!C.initialized||C.wiping||C.world.phase||C.world.ai_active||
         mm1_coop_seat_blocked(C.current)||(cyc_mod_isolated()&&!C.in_guest))return 0;
@@ -1018,6 +1038,7 @@ static void set_enabled(int on) {
     nes_mod_set_function_hook_enabled("mm1.coop.room-gate",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.controller-completed",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.shared-after-controller",enabled);
+    nes_mod_set_function_hook_enabled("mm1.coop.boss-ai-begin",enabled);nes_mod_set_function_hook_enabled("mm1.coop.boss-ai-end",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.pit-continuation",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.private-scroll-left",enabled);nes_mod_set_function_hook_enabled("mm1.coop.private-scroll-right",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.draw-part",enabled);
@@ -1093,7 +1114,7 @@ static int valid(const uint8_t *in,int len) {
     if(n.world.phase>3||n.world.done>1||n.world.ai_active>1||n.world.draw_active>1||n.world.draw_owner>1||
        n.world.refill_active>1||n.world.draw_freeze>1||n.pair_ready>1||n.view_ready>1||n.view_drawing>1||n.view_visible>1||
        (n.world.phase&&(n.world.total!=32||n.world.regs.s<8))||
-       (n.world.ai_active&&(n.world.ai_slot<16||n.world.ai_slot>=32)))return 0;
+       (n.world.ai_active&&n.world.ai_slot!=1&&(n.world.ai_slot<16||n.world.ai_slot>=32)))return 0;
     for(int i=16;i<32;i++)if(n.world.hit_owner[i]>1)return 0;
     const Picture *frames[]={&n.building,&n.shown,&n.view_build[0],&n.view_build[1],&n.view_shown[0],&n.view_shown[1]};
     for(int f=0;f<6;f++)for(int i=0;i<64;i++)if(frames[f]->mask&(1ull<<i)) {
@@ -1177,6 +1198,8 @@ NES_MOD_CONSTRUCTOR(register_mm1_coop) {
        !nes_mod_register_function_entry_plugin("mm1.coop.room-gate",0x9207,room_gate)||
        !nes_mod_register_function_entry_plugin("mm1.coop.controller-completed",0x918A,controller_completed)||
        !nes_mod_register_function_entry_plugin("mm1.coop.shared-after-controller",0x918D,shared_after_controller)||
+       !nes_mod_register_function_entry_plugin("mm1.coop.boss-ai-begin",0xDC6F,boss_ai_begin)||
+       !nes_mod_register_function_entry_plugin("mm1.coop.boss-ai-end",0x91AD,boss_ai_end)||
        !nes_mod_register_function_entry_plugin("mm1.coop.pit-continuation",0x9251,pit_continuation)||
        !nes_mod_register_function_entry_plugin("mm1.coop.private-scroll-left",0x9F9E,private_scroll)||
        !nes_mod_register_function_entry_plugin("mm1.coop.private-scroll-right",0x9F6D,private_scroll))abort();

@@ -403,6 +403,18 @@ bank = 5
 bytes = "A5 94 F0 09 A5 B1 D0 05"
 
 [[mod_function_hook]]
+id = "mm1.coop.boss-ai-begin"
+addr = 0xDC6F
+bank = 7
+bytes = "A9 00 85 68 38 A5 3E E9"
+
+[[mod_function_hook]]
+id = "mm1.coop.boss-ai-end"
+addr = 0x91AD
+bank = 5
+bytes = "A5 55 F0 02 C6 55 20 8B"
+
+[[mod_function_hook]]
 id = "mm1.coop.pit-continuation"
 addr = 0x9251
 bank = 5

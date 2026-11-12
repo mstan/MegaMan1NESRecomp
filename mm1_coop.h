@@ -37,6 +37,8 @@ int mm1_coop_draw_suppressed(void);
 int mm1_coop_draw_camera(void);
 void mm1_coop_record_hits(int owner,uint16_t before,uint16_t after);
 int mm1_coop_character(void);
+int mm1_coop_hud_active(void);
+int mm1_coop_hud_owns_slot(int slot);
 int mm1_coop_dispatch(void);
 int mm1_coop_read(int seat,uint16_t address);
 void mm1_coop_stage_enter(void);

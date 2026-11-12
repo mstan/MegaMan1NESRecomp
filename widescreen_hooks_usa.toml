@@ -357,6 +357,11 @@ id = "mm1.coop.view-hud"
 addr = 0xD36E
 bytes = "A4 0D A5 BB 30 75 A9 68"
 
+  [[mod_function_hook]]
+  id = "mm1.coop.hud-done"
+  addr = 0xD3E9
+  bytes = "84 0D 60 48 4A 4A 85 10"
+
 [[mod_function_hook]]
 id = "mm1.coop.contact-local"
 addr = 0xC9BE

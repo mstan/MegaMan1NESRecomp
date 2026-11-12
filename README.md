@@ -37,6 +37,9 @@ The development `--coop on` slice separates personal movement, equipment state
 and native actors while the original frame loop advances the world once.
 `--coop-p1 megaman|protoman` chooses the complementary character roster.
 Each character uses its own native parts, colors, slide and charged shots.
+Shared play shows both players' native health and weapon meters, with a red
+tint for Proto Man and the boss meter at the right edge. Separate views keep
+the original HUD layout.
 Targeted checks cover movement, native enemy/boss damage and defeat, personal
 health/weapon refills and shared extra lives. Both sprite priority orders also
 work while the main character blinks. Current-build charge/shot and native NMI

@@ -117,7 +117,7 @@ static int render_inner(uint32_t *out,int width,int height,int x0,const uint32_t
         if(full) {
             memset(coverage,0,(size_t)width*240);
             for(int y=0;y<240;y++)memcpy(coverage+y*width+x0,cyc_frame_bg_opaque()+y*256,256);
-            mm1_sprites_draw(out,width,x0,game_camera(),-1,enabled?-16:x0,coverage);
+            mm1_sprites_draw(out,width,x0,game_camera(),mm1_coop_hud_active()?-2:-1,enabled?-16:x0,coverage);
         }
         return 1;
     }
@@ -155,7 +155,7 @@ static int render_inner(uint32_t *out,int width,int height,int x0,const uint32_t
     /* Signed packets also repaint selected native pixels when byte-X sprites
      * have wrapped or the console's column guards interrupt the wide view. */
     if(menu)return 1;
-    if(full){mm1_sprites_draw(out,width,x0,camera_x,-1,-16,coverage);return 1;}
+    if(full){mm1_sprites_draw(out,width,x0,camera_x,mm1_coop_hud_active()?-2:-1,-16,coverage);return 1;}
     mm1_video_paint_dust(out,width,x0,coverage);
     for(int i=ws.display.count-1;i>=0;i--) {
         WsSprite *s=&ws.display.tile[i];
@@ -177,6 +177,7 @@ static int render(uint32_t *out,int width,int height,int x0,const uint32_t *nati
     if(game_render_views(out,width,height,native)){mm1_coop_present_end(previous);return 1;}
     int result=render_inner(out,width,height,x0,native,user);
     if(mm1_coop_menu_active()){if(!result){memset(out,0,width*height*sizeof(*out));for(int y=0;y<240;y++)memcpy(out+y*width+x0,native+y*256,256*sizeof(*out));}mm1_coop_menu_draw(out,width,-1);result=1;}
+    else if(result)game_shared_hud_paint(out,width,x0);
     mm1_coop_present_end(previous);return result;
 }
 
@@ -210,7 +211,8 @@ void mm1_video_character_changed(void) {
             (mm1_weapon_cycle_available()&&(i==2||i==6)));
 #ifdef MM1_PROFILE_USA
     nes_mod_set_function_hook_enabled("mm1.coop.spawn-candidate",mm1_coop_independent());
-    nes_mod_set_function_hook_enabled("mm1.coop.view-hud",mm1_coop_independent());
+    nes_mod_set_function_hook_enabled("mm1.coop.view-hud",mm1_coop_available());
+    nes_mod_set_function_hook_enabled("mm1.coop.hud-done",mm1_coop_available());
 #endif
     /* Re-enabling capture clears its complete frame, including a restored
        paused background. Local layout changes only invalidate composition. */
@@ -352,6 +354,7 @@ NES_MOD_CONSTRUCTOR(register_widescreen) {
 #ifdef MM1_PROFILE_USA
     nes_mod_register_function_entry_plugin("mm1.coop.spawn-candidate",MM_SPAWN_OBJECT,hook);
     nes_mod_register_function_entry_plugin("mm1.coop.view-hud",0xD36E,hook);
+    nes_mod_register_function_entry_plugin("mm1.coop.hud-done",0xD3E9,hook);
 #endif
     nes_mod_register_savestate_hook(WS_PLUGIN ".packets",save_packets,load_packets);
     nes_mod_register_savestate_validator(WS_PLUGIN ".packets",validate_packets);

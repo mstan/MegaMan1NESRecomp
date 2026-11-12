@@ -271,12 +271,13 @@ void mm1_video_paint_slot(uint32_t *out,int width,int x0,const uint8_t *coverage
 static int place(int slot,int x,int y,int *out_x,void *context) {
     (void)y;Paint *p=(Paint*)context;*out_x=x;
     if(p->pending&&slot<=p->insert){mm1_coop_paint(p->out,256,0,cyc_frame_bg_opaque());p->pending=0;}
+    if(mm1_coop_hud_owns_slot(slot))return 0;
     if(!mm1_proto_owns_slot(slot))return 1;
     mm1_video_paint_slot(p->out,256,0,cyc_frame_bg_opaque(),slot);
     return 0;
 }
 int mm1_proto_native_picture(uint32_t *out) {
-    int any=valid_picture()||mm1_video_dust_visible()||valid_portrait()||mm1_coop_picture();for(int i=2;i<5;i++)any|=valid_shot(i);
+    int any=valid_picture()||mm1_video_dust_visible()||valid_portrait()||mm1_coop_picture()||mm1_coop_hud_active();for(int i=2;i<5;i++)any|=valid_shot(i);
     if(!any||!cyc_render_background(out))return 0;
     mm1_video_paint_dust(out,256,0,cyc_frame_bg_opaque());
     Paint p={out,mm1_coop_picture(),mm1_coop_insert_slot()};cyc_render_sprites(out,256,240,0,cyc_frame_bg_opaque(),place,&p);

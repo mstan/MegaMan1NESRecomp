@@ -119,7 +119,7 @@ static void paint_part(const Part *p,uint32_t *out,int width,int offset,const ui
 void mm1_sprites_draw(uint32_t *out,int width,int origin,int camera,int hud_seat,int hud_origin,const uint8_t *opaque) {
     if(!mm1_sprites_ready()||width>CYC_VIDEO_MAX_WIDTH)return;memset(claimed,0,(size_t)width*240);
     int hud=hud_seat<0?F.anchor:hud_seat;
-    for(int i=0;i<F.hud_count[hud];i++)paint_part(&F.hud[hud][i],out,width,F.hud[hud][i].edge?hud_origin:origin,opaque);
+    if(hud_seat!=-2)for(int i=0;i<F.hud_count[hud];i++)paint_part(&F.hud[hud][i],out,width,F.hud[hud][i].edge?hud_origin:origin,opaque);
     for(int actor=0;actor<32;actor++)for(int order=0;order<(actor!=1&&actor<16?F.players:1);order++) {
         int seat=F.anchor^order;
         for(int i=0;i<F.overlays;i++) {

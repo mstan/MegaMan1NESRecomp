@@ -8,6 +8,9 @@ static int game_render_views(uint32_t *out,int width,int height,const uint32_t *
 static void game_views_build(void);
 static void game_views_latch(void);
 static void game_views_reset(void);
+static void game_shared_hud_paint(uint32_t *out,int width,int origin);
+static void game_hud_begin(void);
+static void game_hud_done(void);
 static const char *hook_ids[]={"mm1.widescreen.draw","mm1.widescreen.emit","mm1.widescreen.build","mm1.widescreen.cull","mm1.widescreen.minor_cull","mm1.widescreen.spawn","mm1.widescreen.dma0"};
 static const uint16_t hook_addrs[]={MM_DRAW,MM_EMIT,MM_BUILD,0x9951,0xBE81,MM_SPAWN,MM_DMA0};
 #include "widescreen_common.h"
@@ -73,6 +76,7 @@ static void game_draw_native(uint32_t *out,int width,int x0) {
     int pending=mm1_coop_picture(),insert=mm1_coop_insert_slot();
     for(int i=63;i>=0;i--) {
         if(pending&&i<=insert){mm1_coop_paint(out,width,x0,coverage);pending=0;}
+        if(mm1_coop_hud_owns_slot(i))continue;
         if(mm1_proto_owns_slot(i)) {
             mm1_video_paint_slot(out,width,x0,coverage,i);
             continue;
@@ -289,7 +293,11 @@ static void load_independent(void) {
     }
 }
 static int hook(uint16_t addr) {
-    if(addr==0xD36E&&mm1_coop_independent()&&!cyc_mod_isolated()){int left[2];if(mm1_coop_view_rects(left))return 1;}
+    if(addr==0xD36E&&!cyc_mod_isolated()) {
+        if(mm1_coop_independent()){int left[2];if(mm1_coop_view_rects(left))return 1;}
+        game_hud_begin();
+    }
+    if(addr==0xD3E9&&!cyc_mod_isolated())game_hud_done();
     if(mm1_coop_drawing()) {
         if(addr==MM_BUILD)mm1_proto_draw_begin();
         if(addr==MM_DRAW)mm1_proto_pose_begin();
@@ -342,12 +350,30 @@ static void game_debug(char *out,size_t cap) {
 
 typedef struct {uint8_t x,y,attr,height,pattern[32],palette[4];} ViewHud;
 typedef struct {
-    uint8_t active,native_scene,odd,stage,ready,hud_count[2],native_script;
+    uint8_t active,native_scene,odd,stage,ready,hud_count[2],native_script,hud_shared;
     int16_t camera,left[2];uint8_t tile[2][30][33],palette[2][30][33];ViewHud hud[2][32];
+    uint64_t hud_mask;uint8_t hud_oam[256];
 } ViewFrame;
 static ViewFrame view_build,view_shown;
+static int16_t hud_cursor=-1;
+static uint8_t hud_draw;
 static uint32_t view_native[256*240],view_picture[2][256*240];
-static void game_views_reset(void){memset(&view_build,0,sizeof view_build);memset(&view_shown,0,sizeof view_shown);}
+static void game_views_reset(void){memset(&view_build,0,sizeof view_build);memset(&view_shown,0,sizeof view_shown);hud_cursor=-1;hud_draw=0;}
+static void game_hud_begin(void){hud_cursor=R(0x0D);hud_draw=(uint8_t)(R(0xBB)<128);}
+static void game_hud_done(void) {
+    if(hud_cursor<0)return;
+    CycModRegs r={0};cyc_mod_regs(&r);int last=r.y/4+(r.y==248);
+    if(hud_draw)for(int i=hud_cursor/4+1;i<=last&&i<64;i++) {
+        view_build.hud_mask|=1ull<<i;
+        for(int b=0;b<4;b++)view_build.hud_oam[i*4+b]=R(0x200+i*4+b);
+    }
+    hud_cursor=-1;hud_draw=0;
+}
+int mm1_coop_hud_active(void){return mm1_coop_available()&&!mm1_coop_independent()&&view_shown.hud_shared&&view_shown.stage==R(0x31)&&R(0x31)<10&&!mm1_coop_menu_active();}
+int mm1_coop_hud_owns_slot(int slot) {
+    return slot>=0&&slot<64&&mm1_coop_hud_active()&&(view_shown.hud_mask&(1ull<<slot))&&
+        !memcmp(cyc_render_oam()+slot*4,view_shown.hud_oam+slot*4,4);
+}
 void mm1_world_views_reset(void){game_views_reset();memset(ws.activated,0,sizeof ws.activated);ws.activation_scene=UINT32_MAX;}
 static void view_hud(int seat) {
     int weapon=mm1_weapon_identity_for(seat);CycModRegs r={0};cyc_mod_regs(&r);
@@ -370,7 +396,13 @@ static void view_hud(int seat) {
     cyc_mod_isolate_end();if(!ok){view_build.hud_count[seat]=0;failures++;}
 }
 static void game_views_build(void) {
-    memset(&view_build,0,sizeof view_build);view_build.ready=1;
+    memset(&view_build,0,sizeof view_build);view_build.ready=1;hud_cursor=-1;hud_draw=0;
+    if(!mm1_coop_independent()) {
+        if(mm1_coop_view_active()&&R(0x31)<10&&R(0x54)==32) {
+            view_build.stage=R(0x31);view_build.hud_shared=1;
+            for(int seat=0;seat<2;seat++)view_hud(seat);
+        }return;
+    }
     int left[2];if(!mm1_coop_view_rects(left)||!cache_rom()||cached_stage!=R(0x31))return;
     view_build.active=1;view_build.native_scene=(uint8_t)mm1_coop_view_locked();view_build.odd=R(0x23)&1;view_build.stage=R(0x31);
     view_build.native_script=(uint8_t)!mm1_coop_independent_scene();
@@ -385,15 +417,32 @@ static void game_views_build(void) {
     }
 }
 static void game_views_latch(void){if(view_build.ready){view_shown=view_build;view_build.ready=0;}}
-static void view_hud_paint(uint32_t *out,int seat) {
-    for(int i=view_shown.hud_count[seat]-1;i>=0;i--) {
-        const ViewHud *p=&view_shown.hud[seat][i];
+static void hud_part_paint(uint32_t *out,int width,const ViewHud *p,int dx,int dy,int red) {
         for(int y=0;y<p->height;y++)for(int x=0;x<8;x++) {
-            int py=p->y+1+y,px=p->x+x;if(py>=240||px>=256||!(cyc_render_line_mask(py)&16))continue;
+            int py=p->y+1+y+dy,px=p->x+x+dx;if(py<0||py>=240||px<0||px>=width||!(cyc_render_line_mask(py)&16))continue;
             int row=p->attr&128?p->height-1-y:y,bit=p->attr&64?x:7-x,at=(row/8)*16+(row&7);
             int v=((p->pattern[at]>>bit)&1)|(((p->pattern[at+8]>>bit)&1)<<1);
-            if(v&&(!(p->attr&32)||!coverage[py*256+px]))out[py*256+px]=cyc_render_color_value(p->palette[v]);
+            if(v&&(!(p->attr&32)||!coverage[py*width+px])) {
+                uint32_t color=cyc_render_color_value(p->palette[v]);
+                if(red&&(color&0xFFFFFFu)) {
+                    unsigned r=(color>>16)&255,g=(color>>8)&255,b=color&255;
+                    color=0xFF000000u|((r*3+255)/4<<16)|((g*3+64)/4<<8)|(b*3+64)/4;
+                }out[py*width+px]=color;
+            }
         }
+}
+static void view_hud_paint(uint32_t *out,int seat) {
+    for(int i=view_shown.hud_count[seat]-1;i>=0;i--)hud_part_paint(out,256,&view_shown.hud[seat][i],0,0,0);
+}
+static void game_shared_hud_paint(uint32_t *out,int width,int origin) {
+    if(!mm1_coop_hud_active())return;
+    for(int seat=0;seat<2;seat++)for(int i=view_shown.hud_count[seat]-1;i>=0;i--) {
+        const ViewHud *p=&view_shown.hud[seat][i];
+        int life=p->x==24&&p->attr==1&&p->y>=24&&p->y<=72;
+        int weapon=p->x==16&&p->attr==0&&p->y>=24&&p->y<=72;
+        int boss=p->x==40&&p->attr==2&&p->y>=24&&p->y<=72;
+        if(life||weapon)hud_part_paint(out,width,p,life?-16:8,-5+seat*76,life&&(seat^mm1_coop_roster()));
+        else if(!seat)hud_part_paint(out,width,p,boss?width-56:origin,boss?-5:0,0);
     }
 }
 static void view_scene(uint32_t *out,int seat) {
@@ -437,16 +486,16 @@ static int game_render_views(uint32_t *out,int width,int height,const uint32_t *
     }else view_scene(out,mode==3);
     cyc_render_set_native_origin(0);return 1;
 }
-typedef struct {char magic[4];ViewFrame build,shown;CameraRebase rebase;} ViewsState;
+typedef struct {char magic[4];ViewFrame build,shown;CameraRebase rebase;int16_t hud_cursor;uint8_t hud_draw;} ViewsState;
 static int views_get(uint8_t *out,int cap) {
-    if(cap<(int)sizeof(ViewsState))return -1;ViewsState s={0};memcpy(s.magic,"MV03",4);s.build=view_build;s.shown=view_shown;s.rebase=camera_rebase;
+    if(cap<(int)sizeof(ViewsState))return -1;ViewsState s={0};memcpy(s.magic,"MV04",4);s.build=view_build;s.shown=view_shown;s.rebase=camera_rebase;s.hud_cursor=hud_cursor;s.hud_draw=hud_draw;
     memcpy(out,&s,sizeof s);return sizeof s;
 }
 static int views_valid(const uint8_t *in,int size) {
-    if(!size)return 1;ViewsState s;if(!in||size!=sizeof s)return 0;memcpy(&s,in,sizeof s);if(memcmp(s.magic,"MV03",4)||s.rebase.pending>1||
+    if(!size)return 1;ViewsState s;if(!in||size!=sizeof s)return 0;memcpy(&s,in,sizeof s);if(memcmp(s.magic,"MV04",4)||s.rebase.pending>1||s.hud_draw>1||s.hud_cursor< -1||s.hud_cursor>248||(s.hud_cursor>=0&&(s.hud_cursor&3))||
         (s.rebase.pending&&(s.rebase.stage>=10||s.rebase.camera>47*256)))return 0;
     const ViewFrame *v[]={&s.build,&s.shown};for(int k=0;k<2;k++) {
-        if(v[k]->active>1||v[k]->native_scene>1||v[k]->native_script>1||v[k]->odd>1||v[k]->ready>1||(v[k]->active&&v[k]->stage>=10))return 0;
+        if(v[k]->active>1||v[k]->native_scene>1||v[k]->native_script>1||v[k]->hud_shared>1||v[k]->odd>1||v[k]->ready>1||((v[k]->active||v[k]->hud_shared)&&v[k]->stage>=10))return 0;
         for(int seat=0;seat<2;seat++) {
             if(v[k]->hud_count[seat]>32||v[k]->left[seat]<0||v[k]->left[seat]>47*256)return 0;
             for(int y=0;y<30;y++)for(int x=0;x<33;x++)if(v[k]->palette[seat][y][x]>3)return 0;
@@ -458,7 +507,7 @@ static int views_valid(const uint8_t *in,int size) {
     }return 1;
 }
 static int views_set(const uint8_t *in,int size) {
-    if(!views_valid(in,size))return 0;if(size){ViewsState s;memcpy(&s,in,size);view_build=s.build;view_shown=s.shown;camera_rebase=s.rebase;}
+    if(!views_valid(in,size))return 0;if(size){ViewsState s;memcpy(&s,in,size);view_build=s.build;view_shown=s.shown;camera_rebase=s.rebase;hud_cursor=s.hud_cursor;hud_draw=s.hud_draw;}
     else {game_views_reset();mm1_world_cancel_rebase();}return 1;
 }
 NES_MOD_CONSTRUCTOR(register_mm1_views) {

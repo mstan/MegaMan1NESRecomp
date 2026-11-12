@@ -101,7 +101,8 @@ static void restore_death_body(const Player *p) {
     W(0x400,p->death_sprite);W(0x420,p->death_flags);W(0x440,p->death_anim);W(0x640,p->death_fire);
 }
 static const char *world_hook_ids[]={"mm1.coop.step","mm1.coop.next","mm1.coop.return",
-    "mm1.coop.weapon-begin","mm1.coop.weapon-end","mm1.coop.boss-killed","mm1.coop.stage-clear"};
+    "mm1.coop.weapon-begin","mm1.coop.weapon-end","mm1.coop.boss-killed","mm1.coop.stage-clear",
+    "mm1.coop.contact-local","mm1.coop.weapon-local"};
 void mm1_controls_refresh(void);
 int mm1_controls_gameplay(void);
 int mm1_controls_menu(void);
@@ -544,6 +545,24 @@ static int enemy_owner(int slot) {
     if((w->pending&(1u<<slot))&&(R(0x420+slot)&128))return w->hit_owner[slot];
     return mm1_coop_nearest(R(0x460+slot)*256+R(0x480+slot),R(0x600+slot));
 }
+static int collision_local(uint16_t address) {
+    if(!enabled||!C.initialized||C.wiping||C.stage!=R(0x31)||R(0x31)>=10||cyc_mod_isolated())return 0;
+    int subject=address==0xC9BE?0:R(0x2F);if(subject>=16)return 0;
+    int camera=R(0x1B)*256+R(0x1A),x=R(0x460+subject)*256+R(0x480+subject);
+    if(x>=camera&&x<camera+256)return 0;
+    /* C9BE/C9C2 is a bounded native overlap test. Its caller already built
+       the subject's 00/01 interval relative to the common camera. Translate
+       that interval and the camera together, then retain the native result
+       and documented scratch only. No devices, actors or caller stack leave
+       the isolated test; real damage/refill/death continues in its caller. */
+    int local=x-128;if(local<0)local=0;
+    CycModRegs original={0},r={0};cyc_mod_regs(&original);r=original;
+    uint8_t scratch[3];int ok=cyc_mod_isolate_begin();if(!ok){C.failures++;return 0;}
+    W(0,camera-local+R(0));W(1,camera-local+R(1));W(0x1A,local);W(0x1B,local>>8);
+    ok=cyc_mod_call(address,&r);if(ok)for(int i=0;i<3;i++)scratch[i]=R(0x0C+i);
+    cyc_mod_isolate_end();if(!ok){C.failures++;return 0;}
+    for(int i=0;i<3;i++)W(0x0C+i,scratch[i]);r.s=original.s;cyc_mod_set_regs(&r);return 1;
+}
 static int world_step(uint16_t address) {
     (void)address;if(!enabled||!C.initialized||C.wiping||cyc_mod_isolated())return 0;
     World *w=&C.world;int slot=R(0x2F);CycModRegs r={0};cyc_mod_regs(&r);
@@ -805,7 +824,7 @@ static void set_enabled(int on) {
     enabled=on!=0;if(enabled)mm1_proto_coop_enable();
     nes_mod_set_function_hook_enabled("mm1.coop.death",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.draw-part",enabled);
-    for(int i=0;i<7;i++)nes_mod_set_function_hook_enabled(world_hook_ids[i],enabled);
+    for(int i=0;i<sizeof world_hook_ids/sizeof *world_hook_ids;i++)nes_mod_set_function_hook_enabled(world_hook_ids[i],enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.refill",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.pre-shoot",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.game-over",enabled);
@@ -907,9 +926,9 @@ NES_MOD_CONSTRUCTOR(register_mm1_coop) {
        !nes_mod_register_function_entry_plugin("mm1.coop.draw-part",0xD293,draw_part)||
        !nes_mod_register_savestate_hook("mm1.coop",get,put)||
        !nes_mod_register_savestate_validator("mm1.coop",valid))abort();
-    static const uint16_t pcs[]={0x98F2,0x998A,0xC3BE,0xA277,0x91B9,0xCA2D,0xC05A};
-    NESModFunctionEntryCallback functions[]={world_step,world_next,native_return,weapon_begin,weapon_end,script_owner,script_owner};
-    for(int i=0;i<7;i++)if(!nes_mod_register_function_entry_plugin(world_hook_ids[i],pcs[i],functions[i]))abort();
+    static const uint16_t pcs[]={0x98F2,0x998A,0xC3BE,0xA277,0x91B9,0xCA2D,0xC05A,0xC9BE,0xC9C2};
+    NESModFunctionEntryCallback functions[]={world_step,world_next,native_return,weapon_begin,weapon_end,script_owner,script_owner,collision_local,collision_local};
+    for(int i=0;i<sizeof pcs/sizeof *pcs;i++)if(!nes_mod_register_function_entry_plugin(world_hook_ids[i],pcs[i],functions[i]))abort();
     if(!nes_mod_register_function_entry_plugin("mm1.coop.refill",0x915E,refill_begin))abort();
     if(!nes_mod_register_function_entry_plugin("mm1.coop.pre-shoot",0x91A7,pre_shoot)||
        !nes_mod_register_function_entry_plugin("mm1.coop.game-over",0x9038,game_over)||

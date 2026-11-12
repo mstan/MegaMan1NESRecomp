@@ -351,3 +351,13 @@ bytes = "68 68 4C B3 C3 BD 20 04"
 id = "mm1.coop.view-hud"
 addr = 0xD36E
 bytes = "A4 0D A5 BB 30 75 A9 68"
+
+[[mod_function_hook]]
+id = "mm1.coop.contact-local"
+addr = 0xC9BE
+bytes = "A9 02 D0 02 A9 04 3D 20"
+
+[[mod_function_hook]]
+id = "mm1.coop.weapon-local"
+addr = 0xC9C2
+bytes = "A9 04 3D 20 04 D0 02 18"

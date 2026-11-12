@@ -5,7 +5,10 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     for name in ('rom','donor','exe','out'):p.add_argument('--'+name,type=pathlib.Path,required=True)
     p.add_argument('--reflection-only',action='store_true')
+    p.add_argument('--view',choices=('shared','split','p1','p2'),default='shared')
+    p.add_argument('--far',action='store_true',help='Qualify native ordinary-enemy hits beyond the primary camera')
     a=p.parse_args();a.exe=a.exe.resolve();a.out.mkdir(parents=True,exist_ok=True)
+    assert not a.far or a.view!='shared'
     env=dict(os.environ,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy',NESRECOMP_NO_LAUNCHER='1')
     def run(name,kind='normal',hp=8,boss=False,roster='megaman',extra=()):
         release=1610 if kind=='full' else 1500
@@ -16,6 +19,9 @@ def main():
         values={0x480:104,0x460:0,0x600:180,0x420:64,0x400:0,0x440:0,0x640:0,
             0x680:0,0x660:0,0x4A0:0,0x620:0,0x55:0x81,0x5F:0}
         if kind=='reflect':values.update({0x600:160,0x400:9,0x55:0,0x5F:5})
+        if a.far:
+            values.update({0x460:1,0x480:224})
+            for slot in range(16,32):lines.append(f'1498 POKE {0x600+slot:04X} F8')
         pokes=[]
         for address,value in values.items():pokes+=['--coop-test-poke',f'{1499 if kind=="reflect" else 1490}:2:{address:X}:{value:X}']
         if kind!='reflect':lines += [f'{1505 if kind=="full" else 1500} 2:B',f'{release+1 if kind=="normal" else release} 2:-']
@@ -24,9 +30,10 @@ def main():
             0x4C0:0,0x4E0:0,0x600:176,0x620:0,0x640:127,0x660:0,0x680:0,
             0x6A0:1,0x6C0:hp,0x6E0:0 if boss else 0x21}
         if kind=='reflect':target.update({0x480:152,0x600:152})
+        if a.far:target.update({0x460:2,0x480:16 if kind=='reflect' else 40})
         for address,value in target.items():lines.append(f'{release} POKE {address+slot:04X} {value:02X}')
         if kind=='reflect':
-            for address,value in {**target,0x420:2,0x480:112,0x6E0:0x1A,0x6C0:1}.items():
+            for address,value in {**target,0x420:2,0x460:1 if a.far else 0,0x480:232 if a.far else 112,0x6E0:0x1A,0x6C0:1}.items():
                 lines.append(f'{release} POKE {address+16:04X} {value:02X}')
             if lethal:lines+=['1800 2:LEFT','1820 2:-','1850 A','1860 -']
         if boss:
@@ -36,7 +43,7 @@ def main():
         route=a.out/(name+'.txt');route.write_text('\n'.join(sorted(lines,key=lambda s:int(s.split()[0])))+'\n')
         args=[str(a.exe),str(a.rom.resolve()),'--frames',str(frames),'--input',str(route),'--coop','on',
             '--coop-p1',roster,'--mm4-rom',str(a.donor.resolve()),'--charge','on' if kind=='full' else 'off',
-            '--widescreen','off','--no-save','--config',str(a.out/'test.ini'),*pokes,
+            '--widescreen','off','--no-save','--coop-view',a.view,'--config',str(a.out/'test.ini'),*pokes,
             '--coop-report',str(a.out/(name+'.jsonl')),'--charge-report',str(a.out/(name+'-charge.jsonl')),
             '--proto-report',str(a.out/(name+'-proto.jsonl')),
             '--frame-log',str(a.out/(name+'.frames')),'--frame-log-frames',f'{frames-1}:{frames-1}',
@@ -58,6 +65,12 @@ def main():
     if a.reflection_only:
         row,ram=run('reflected-enemy',kind='reflect')
         assert ram[0x6D2]==4 and ram[0x6F2]==0x21,(row,ram[0x6D2],ram[0x6F2])
+        if a.far:
+            run('reflected-enemy-interpreter',kind='reflect',extra=('--interp-only',))
+            assert (a.out/'reflected-enemy.hash').read_bytes()==(a.out/'reflected-enemy-interpreter.hash').read_bytes()
+            assert (a.out/'reflected-enemy.png').read_bytes()==(a.out/'reflected-enemy-interpreter.png').read_bytes()
+            summary=dict(result='pass',far_native_reflected_enemy_buster_damage=True,special_weapon_restored=5,native_interpreter_exact=True)
+            (a.out/'reflection-summary.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary));return
         row,ram=run('reflected-boss',kind='reflect',hp=3,boss=True)
         assert row['anchor']==1 and ram[0x6C1]==0 and ram[0x601]==248 and ram[0x3E]==0
         assert ram[0x6FF]==0x44 and ram[0x61F]<248
@@ -72,6 +85,12 @@ def main():
         assert ram[0x6D2]==4 and ram[0x6F2]==0x21,(row,ram[0x6D2],ram[0x6F2])
         row,ram=run('full-'+roster,kind='full',hp=20,roster=roster)
         assert ram[0x6D2]==8 and ram[0x6F2]==0x21,(row,ram[0x6D2],ram[0x6F2])
+    if a.far:
+        run('full-interpreter',kind='full',hp=20,roster='protoman',extra=('--interp-only',))
+        assert (a.out/'full-protoman.hash').read_bytes()==(a.out/'full-interpreter.hash').read_bytes()
+        assert (a.out/'full-protoman.png').read_bytes()==(a.out/'full-interpreter.png').read_bytes()
+        summary=dict(result='pass',both_far_guest_characters_native_enemy_damage=True,full_enemy_hp=[20,8],native_interpreter_exact=True)
+        (a.out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary));return
     row,ram=run('boss',kind='full',hp=20,boss=True)
     assert ram[0x6C1]==11,(row,ram[0x6C1])
     row,ram=run('boss-lethal',kind='full',hp=9,boss=True)

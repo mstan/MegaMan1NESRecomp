@@ -47,6 +47,9 @@ free. Personal native sprite captures use each actor's actual world position,
 so a shot can leave one view and appear in the other. Both characters retain
 their own weapon graphics, colors, slide and charged shots. Native team-death
 scripts display their original particles and HUD policy in both grids.
+Original native overlap tests run in the distant player's local coordinates,
+so contacts, personal refills, shared pickups and weapon hits work beyond the
+primary camera as well.
 
 Targeted Cut Man checks cover full native grid images for both characters,
 both complete inventory panels, peer-only ordinary spawning, gap exclusion,

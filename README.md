@@ -9,8 +9,8 @@ retain their own weapon patterns while the main player's graphics are displayed.
 
 The [widescreen implementation](WIDESCREEN.md) remains experimental. USA checks
 cover Cut Man terrain, wider enemy activation, native/interpreter agreement and
-current-build state replay. Margin combat, other stages and scripted transitions
-still need qualification. The Europe prototype retains its separate hooks and
+current-build state replay. Other stages and scripted transitions still need
+qualification. The Europe prototype retains its separate hooks and
 opt-in default.
 
 The optional USA Proto Man package adds Select teleport swapping, an airborne
@@ -73,6 +73,9 @@ original enemy pool and retrying when a slot becomes available. Shots can cross
 into the partner's view. Targeted checks compare full native images, both native
 menu panels, local view modes, distant survivor handoffs, native death scripts
 and current-build state/audio continuation.
+Native contact and weapon overlap tests also use the distant player's local
+coordinates. Targeted checks cover both characters' damage, personal refills,
+shared extra lives, charged shots and reflected shots beyond the main camera.
 Full-stage transition coverage and online play are still being implemented;
 the Co-op package is not exposed in the Mods catalog yet.
 

@@ -4,6 +4,8 @@ import argparse,json,os,pathlib,subprocess,wave
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     for name in ('rom','exe','out'):p.add_argument('--'+name,type=pathlib.Path,required=True)
+    p.add_argument('--view',choices=('shared','split','p1','p2'),default='shared')
+    p.add_argument('--far',action='store_true',help='Place the guest and native contact beyond the primary camera')
     a=p.parse_args();a.exe=a.exe.resolve();a.out.mkdir(parents=True,exist_ok=True)
     env=dict(os.environ,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy',NESRECOMP_NO_LAUNCHER='1')
     def run(name,kind,roster='megaman',extra=()):
@@ -11,7 +13,9 @@ def main():
         # projected. Set the main player's precondition once instead.
         lines=['0 -','0 2:-','180 START','181 -','360 START','361 -','1400 POKE 0055 81','1400 POKE 006A 1C']
         for slot in range(16,32):lines.append(f'1490 POKE {0x600+slot:04X} F8')
-        values={0x480:104,0x460:0,0x600:180,0x420:64,0x400:0,0x440:0,0x640:0,
+        if a.far:
+            for slot in range(16,32):lines.append(f'1498 POKE {0x600+slot:04X} F8')
+        values={0x480:32 if a.far else 104,0x460:2 if a.far else 0,0x600:180,0x420:64,0x400:0,0x440:0,0x640:0,
             0x680:0,0x660:0,0x4A0:0,0x620:0,0x55:0,0x6A:10 if kind=='health' else 28,
             0x5F:5 if kind=='weapon' else 0,0x6F:10}
         pokes=[]
@@ -19,12 +23,13 @@ def main():
         if kind=='weapon':lines+=['1490 POKE 005D FE','1490 POKE 006F 07']
         if kind=='health':lines+=['1490 POKE 005D FE','1508 X2:R','1509 X2:-']
         type_id={'hurt':0x1A,'health':0x40,'weapon':0x3F,'life':0x41}[kind]
-        actor={0x400:255,0x420:2,0x440:0,0x460:0,0x480:104,0x4A0:0,0x4C0:0,0x4E0:0,
+        actor={0x400:255,0x420:2,0x440:0,0x460:2 if a.far else 0,0x480:32 if a.far else 104,0x4A0:0,0x4C0:0,0x4E0:0,
             0x600:180,0x620:0,0x640:127,0x660:0,0x680:0,0x6A0:1,0x6C0:1,0x6E0:type_id}
         for address,value in actor.items():lines.append(f'1499 POKE {address+18:04X} {value:02X}')
         route=a.out/(name+'.txt');route.write_text('\n'.join(sorted(lines,key=lambda s:int(s.split()[0])))+'\n')
         args=[str(a.exe),str(a.rom.resolve()),'--frames','1570','--input',str(route),'--coop','on',
-            '--coop-p1',roster,'--weapon-cycle','on','--widescreen','off','--charge','off','--slide','off','--no-save',
+            '--coop-p1',roster,'--weapon-cycle','on','--widescreen','fit' if a.far and a.view=='shared' else 'off',
+            '--present-size','2560x720','--charge','off','--slide','off','--no-save','--coop-view',a.view,
             '--config',str(a.out/'test.ini'),*pokes,'--coop-report',str(a.out/(name+'.jsonl')),
             '--frame-log',str(a.out/(name+'.frames')),'--frame-log-frames','1569:1569',
             '--hash-out',str(a.out/(name+'.hash')),'--present-out',str(a.out/(name+'.png')),*extra]
@@ -58,7 +63,7 @@ def main():
     weapon=run('weapon','weapon');assert weapon[1570]['weapon']==[0,5] and weapon[1570]['energy'][1]==20,weapon[1570]
     assert (a.out/'weapon.frames').read_bytes()[336+0x6F]==7
     life=run('life','life');assert life[1570]['lives']==life[1498]['lives']+1,(life[1498],life[1570])
-    summary=dict(result='pass',guest_native_damage=[4,2],personal_invulnerability_ticks=True,
+    summary=dict(result='pass',view=a.view,outside_primary_camera=a.far,guest_native_damage=[4,2],personal_invulnerability_ticks=True,
         guest_health_refill=[10,20],guest_weapon_refill=[10,20],shared_life_once=True,
         native_refill_owner_and_anchor=True,refill_current_state_pcm_exact=True,native_interpreter_exact=True)
     (a.out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary))

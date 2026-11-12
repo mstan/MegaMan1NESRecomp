@@ -369,6 +369,12 @@ bank = 5
 bytes = "20 05 A1 A6 28 E8 8A 48"
 
 [[mod_function_hook]]
+id = "mm1.coop.room-gate"
+addr = 0x9207
+bank = 5
+bytes = "C9 01 D0 10 A5 B0 F0 03"
+
+[[mod_function_hook]]
 id = "mm1.coop.room-previous"
 addr = 0x925B
 bank = 5

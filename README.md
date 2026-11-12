@@ -87,6 +87,11 @@ only that character while the survivor continues, without spending a shared life
 The native Cut Man shutters also accept a distant second-player initiator and
 bring both characters through the corridor and into the boss room. Their
 original shutter animation and mid-scroll state/audio continuation are checked.
+`--coop-wait-both on` optionally holds a horizontal boundary until the partner
+arrives, and hides the first vertical arrival until both reach the same exit.
+It defaults to off. A waiting survivor can proceed after the partner dies.
+Targeted Cut Man checks cover both player orders, pending-state audio replay,
+vertical return links and the original horizontal scripts.
 Guest movement keeps native collision without streaming another background into
 the main player's view; native weapon changes still update the shared blocks.
 Full-stage transition coverage and online play are still being implemented;

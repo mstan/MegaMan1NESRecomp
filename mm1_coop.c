@@ -40,6 +40,7 @@ typedef struct {
     char magic[4];uint8_t on,initialized,stage,current,in_guest,drawing,roster,anchor,independent;
     Player players[2];Picture building,shown,view_build[2],view_shown[2];uint8_t oam[256];
     uint8_t view_ready,view_drawing,view_visible,room_follow,skip_controller;
+    uint8_t wait_mode,waiting,wait_direction[2],wait_screen[2],wait_y[2],wait_flags[2];uint16_t wait_camera[2];
     uint64_t draw_mask;uint8_t draw_oam[256];
     uint64_t primary_build_mask;uint8_t primary_oam[256];int16_t insert_slot;uint8_t primary_cursor,primary_seen,pair_ready;
     uint32_t test_applied;
@@ -52,7 +53,7 @@ typedef struct {
     uint64_t updates,failures,deaths[2];
 } Coop;
 static Coop C;
-static int enabled,roster,view_mode;
+static int enabled,roster,view_mode,wait_both;
 static uint16_t addresses[MAX_PERSONAL],indices[2048];
 static int address_count;
 static FILE *report;
@@ -68,8 +69,9 @@ static void hide_dead_body(void);
 static void particle_step(Player *p);
 static void lifecycle_tick(void);
 static void follow_partner(void);
+static int wait_for_partner(int seat,int direction);
 static int unavailable(int seat){Player *p=&C.players[seat];return p->dead||((C.withdrawn&(1u<<seat))&&p->teleport!=TELE_IN&&p->teleport!=TELE_OPEN);}
-int mm1_coop_seat_blocked(int seat){return enabled&&C.initialized&&(C.players[seat].dead||C.players[seat].teleport||C.players[seat].transport_dispatched||(C.room_follow&(1u<<seat)));}
+int mm1_coop_seat_blocked(int seat){return enabled&&C.initialized&&(C.players[seat].dead||C.players[seat].teleport||C.players[seat].transport_dispatched||((C.room_follow|C.waiting)&(1u<<seat)));}
 int mm1_coop_controller_blocked(void){return mm1_coop_seat_blocked(C.current)&&!(C.in_guest&&C.players[C.current].teleport==TELE_OPEN);}
 int mm1_coop_transporting(void){return enabled&&C.initialized&&C.players[C.current].teleport&&C.players[C.current].teleport!=TELE_HIDDEN;}
 int mm1_coop_view_active(void){
@@ -247,7 +249,10 @@ static int private_call(uint16_t address,CycModRegs *regs,int limit,int hooks) {
     int ok=cyc_mod_call(address,regs);
     if(ok&&address==0x94A8&&R(0x26)) {
         int direction=R(0x26),camera=R(0x1A)+R(0x1B)*256;
-        if(mm1_world_exit_allowed(direction,camera,R(0x420))){private_exit=direction;private_exit_camera=camera;}
+        if(mm1_world_exit_allowed(direction,camera,R(0x420))){
+            if(!wait_both||!wait_for_partner(C.current,direction)){private_exit=direction;private_exit_camera=camera;}
+            else W(0x26,0);
+        }
         else if(direction==3)ok=cyc_mod_call(0xC219,regs);
     }
     uint8_t result[MAX_PERSONAL],sound[16],world[WEAPON_WORLD_BYTES];int count=0;
@@ -344,6 +349,54 @@ static void clear_combat(void) {
     for(int slot=2;slot<16;slot++)W(0x600+slot,248);
     for(int a=0x5A0;a<0x600;a++)W(a,0);
     W(0x60,0);W(0x61,0);W(0x640,0);W(0xAD,0);W(0x14,0);W(0x16,0);W(0x18,0);
+}
+static void finish_wait(void) {
+    for(int seat=0;seat<2;seat++)if(C.waiting&(1u<<seat)) {
+        personal(&C.players[seat],0x600,C.wait_y[seat]);personal(&C.players[seat],0x420,C.wait_flags[seat]);
+        if(seat==C.current){W(0x600,C.wait_y[seat]);W(0x420,C.wait_flags[seat]);}
+    }
+    C.waiting=0;
+}
+static int wait_for_partner(int seat,int direction) {
+    int other=seat^1,screen=R(0x460);
+    if(unavailable(other)){finish_wait();return 0;}
+    if(C.waiting&(1u<<other)) {
+        if(C.wait_direction[other]==direction&&C.wait_screen[other]==screen){finish_wait();return 0;}
+        /* Keep an opposite exit inside the same stripe so it can turn back. */
+        int x=screen*256+R(0x480);
+        if(direction==2)x=(R(0x28)+1)*256-17;else if(direction==4)x=R(0x27)*256+16;
+        W(0x460,x>>8);W(0x480,x);W(0x4A0,0);W(0x26,0);
+        if(direction==1||direction==3){W(0x600,direction==1?24:216);W(0x420,R(0x420)&64);W(0x30,0);W(0x680,0);W(0x660,0);}
+        return 1;
+    }
+    if(direction==2||direction==4) {
+        int edge=direction==2?232:24,x=mm1_coop_read(other,0x480);
+        if(!mm1_coop_seat_blocked(other)&&mm1_coop_read(other,0x460)==screen&&(direction==2?x>=edge:x<=edge))return 0;
+        W(0x480,edge);W(0x4A0,0);return 1;
+    }
+    C.wait_direction[seat]=(uint8_t)direction;C.wait_screen[seat]=(uint8_t)screen;
+    C.wait_camera[seat]=(uint16_t)(R(0x1A)+R(0x1B)*256);C.wait_y[seat]=R(0x600);C.wait_flags[seat]=R(0x420);
+    clear_combat();W(0x600,248);W(0x420,R(0x420)&64);capture(&C.players[seat]);
+    C.waiting|=(uint8_t)(1u<<seat);C.select_hold[seat]=C.select_armed[seat]=0;return 1;
+}
+static int room_gate(uint16_t address) {
+    (void)address;if(!enabled||!wait_both||!C.initialized||C.wiping||cyc_mod_isolated())return 0;
+    int direction=R(0x26),camera=R(0x1A)+R(0x1B)*256;
+    if(!mm1_world_exit_allowed(direction,camera,R(0x420))||!wait_for_partner(C.current,direction))return 0;
+    /* This is a native branch target, with no JSR caller. Resume its real
+       end-of-frame path through one balanced RTS rather than returning out. */
+    CycModRegs r={0};cyc_mod_regs(&r);if(r.s<2){C.failures++;return 0;}
+    unsigned stack=r.s;W(0x100|stack,0x91);stack=(stack-1)&255;W(0x100|stack,0xC8);stack=(stack-1)&255;
+    r.s=(uint8_t)stack;cyc_mod_set_regs(&r);W(0x26,0);return 1;
+}
+static int waiting_survivor(void) {
+    for(int seat=0;seat<2;seat++)if((C.waiting&(1u<<seat))&&unavailable(seat^1)) {
+        int direction=C.wait_direction[seat],camera=C.wait_camera[seat];
+        if(!mm1_world_rebase(camera)){C.failures++;return 0;}
+        finish_wait();
+        if(C.anchor!=seat){C.anchor=(uint8_t)seat;C.handoffs++;}
+        C.current=C.anchor;project(&C.players[seat]);C.skip_controller=1;W(0x26,direction);return 1;
+    }return 0;
 }
 static void follow_partner(void) {
     if(!C.room_follow||C.current!=C.anchor)return;
@@ -541,8 +594,8 @@ int mm1_coop_dispatch(void) {
         if(seat==C.current)W(address,value);personal(&C.players[seat],address,value);C.test_applied|=1u<<i;
     }
     if(!mm1_world_prepare()){C.failures++;return 0;}
-    capture(&C.players[C.anchor]);lifecycle_tick();int guest=C.anchor^1;
-    if(C.players[guest].dead||C.players[guest].teleport||C.players[guest].transport_dispatched)return 0;
+    capture(&C.players[C.anchor]);if(waiting_survivor())return 0;lifecycle_tick();int guest=C.anchor^1;
+    if(C.players[guest].dead||C.players[guest].teleport||C.players[guest].transport_dispatched||(C.waiting&(1u<<guest)))return 0;
     uint8_t original[2048],after[2048];for(int i=0;i<2048;i++)original[i]=R(i);
     CycModRegs regs={0},original_regs={0};cyc_mod_regs(&original_regs);regs=original_regs;
     C.current=(uint8_t)guest;Player *p=&C.players[guest];project(p);
@@ -635,7 +688,7 @@ static int world_step(uint16_t address) {
     if(slot==2){w->done=0;if(C.players[C.anchor].dead)particle_step(&C.players[C.anchor]);}
     if(slot==16&&!w->done&&!w->ai_active) {
         w->done=1;int guest=C.anchor^1;
-        if((C.players[guest].dead&&!C.players[guest].blast_ticks)||C.players[guest].teleport==TELE_HIDDEN)return 0;
+        if((C.players[guest].dead&&!C.players[guest].blast_ticks)||C.players[guest].teleport==TELE_HIDDEN||(C.waiting&(1u<<guest)))return 0;
         capture(&C.players[C.anchor]);w->regs=r;w->total=R(0x54);w->reference=R(0x2F);w->lift_count=R(0x9A);
         for(int i=0;i<14;i++)w->scratch[i]=R(i);
         C.current=(uint8_t)guest;project(&C.players[guest]);if(R(0x55))W(0x55,R(0x55)-1);
@@ -766,7 +819,7 @@ void mm1_coop_stage_enter(void) {
     if(enabled)for(int seat=0;seat<2;seat++){C.current=(uint8_t)seat;mm1_charge_stage_enter();mm1_slide_stage_enter();}
     C.current=C.anchor=C.build_owner=C.shown_owner=0;C.building_guest_owner=C.shown_guest_owner=1;C.intro_picture=0;
     memset(&C.world,0,sizeof C.world);C.building.mask=C.shown.mask=0;C.pair_ready=0;
-    C.view_ready=C.view_drawing=C.view_visible=C.room_follow=0;memset(C.view_build,0,sizeof C.view_build);memset(C.view_shown,0,sizeof C.view_shown);
+    C.view_ready=C.view_drawing=C.view_visible=C.room_follow=C.waiting=0;memset(C.view_build,0,sizeof C.view_build);memset(C.view_shown,0,sizeof C.view_shown);
 }
 void mm1_coop_video_latch(void) {
     if(!enabled)return;
@@ -889,6 +942,7 @@ static void set_enabled(int on) {
     enabled=on!=0;if(enabled)mm1_proto_coop_enable();
     nes_mod_set_function_hook_enabled("mm1.coop.death",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.room-next",enabled);nes_mod_set_function_hook_enabled("mm1.coop.room-previous",enabled);
+    nes_mod_set_function_hook_enabled("mm1.coop.room-gate",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.controller-completed",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.pit-continuation",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.private-scroll-left",enabled);nes_mod_set_function_hook_enabled("mm1.coop.private-scroll-right",enabled);
@@ -928,21 +982,24 @@ static void frame_end(void *ctx) {
     for(int seat=0;seat<2;seat++) {
         fputs(seat?",[":"[",report);for(int a=0x6B;a<=0x71;a++)fprintf(report,"%s%d",a==0x6B?"":",",mm1_coop_read(seat,(uint16_t)a));fputc(']',report);
     }char menu[512];mm1_coop_menu_debug(menu,sizeof menu);
-    fprintf(report,"],\"shown_owner\":%u,\"guest_owner\":%u,\"intro\":%u,\"blast\":[%u,%u],\"withdrawn\":%u,\"teleport\":[%u,%u],\"hold\":[%u,%u],\"withdrawals\":[%llu,%llu],\"rejoins\":[%llu,%llu],\"revivals\":[%llu,%llu],%s}\n",
+    fprintf(report,"],\"shown_owner\":%u,\"guest_owner\":%u,\"intro\":%u,\"blast\":[%u,%u],\"withdrawn\":%u,\"teleport\":[%u,%u],\"hold\":[%u,%u],\"withdrawals\":[%llu,%llu],\"rejoins\":[%llu,%llu],\"revivals\":[%llu,%llu],\"wait_both\":%d,\"waiting\":%u,%s}\n",
         C.shown_owner,C.shown_guest_owner,C.intro_picture,C.players[0].blast_ticks,C.players[1].blast_ticks,C.withdrawn,
         C.players[0].teleport,C.players[1].teleport,C.select_hold[0],C.select_hold[1],
         (unsigned long long)C.withdrawals[0],(unsigned long long)C.withdrawals[1],(unsigned long long)C.rejoins[0],(unsigned long long)C.rejoins[1],
-        (unsigned long long)C.revivals[0],(unsigned long long)C.revivals[1],menu);
+        (unsigned long long)C.revivals[0],(unsigned long long)C.revivals[1],wait_both,C.waiting,menu);
     }
 }
-static int get(uint8_t *out,int cap){if(cap<(int)sizeof C)return -1;memcpy(C.magic,"MCO9",4);C.on=(uint8_t)enabled;C.roster=(uint8_t)roster;C.independent=(uint8_t)mm1_coop_independent();memcpy(out,&C,sizeof C);return sizeof C;}
+static int get(uint8_t *out,int cap){if(cap<(int)sizeof C)return -1;memcpy(C.magic,"MCOA",4);C.on=(uint8_t)enabled;C.roster=(uint8_t)roster;C.independent=(uint8_t)mm1_coop_independent();C.wait_mode=(uint8_t)wait_both;memcpy(out,&C,sizeof C);return sizeof C;}
 static int valid(const uint8_t *in,int len) {
     if(!len)return !enabled;if(!in||len!=sizeof C)return 0;Coop n;memcpy(&n,in,sizeof n);
-    if(memcmp(n.magic,"MCO9",4)||n.on!=enabled||n.roster!=roster||n.independent!=mm1_coop_independent()||n.initialized>1||n.current>1||n.anchor>1||n.in_guest||n.drawing||n.room_follow>3||n.skip_controller>1||
+    if(memcmp(n.magic,"MCOA",4)||n.on!=enabled||n.roster!=roster||n.independent!=mm1_coop_independent()||n.wait_mode!=wait_both||n.waiting>2||n.initialized>1||n.current>1||n.anchor>1||n.in_guest||n.drawing||n.room_follow>3||n.skip_controller>1||
         n.players[0].dead>1||n.players[1].dead>1||n.primary_seen>1||n.insert_slot< -1||n.insert_slot>=64)return 0;
     if(n.wiping>1||n.restarting>1||n.game_over>1||n.pending_wipe>1||n.wipe_owner>1||n.checkpoint>2)return 0;
     if(n.build_owner>1||n.shown_owner>1||n.building_guest_owner>1||n.shown_guest_owner>1||n.intro_picture>1)return 0;
     if(n.withdrawn>=3||n.revive_pending>3)return 0;
+    if(n.waiting&&!wait_both)return 0;
+    for(int seat=0;seat<2;seat++)if((n.waiting&(1u<<seat))&&
+        ((n.wait_direction[seat]!=1&&n.wait_direction[seat]!=3)||n.wait_screen[seat]>=48||n.wait_camera[seat]>47*256||n.players[seat].dead))return 0;
     for(int seat=0;seat<2;seat++)if(n.players[seat].teleport>TELE_OPEN||n.players[seat].transport_dispatched>1||
         n.select_hold[seat]>90||n.select_armed[seat]>1||n.select_previous[seat]>1||n.players[seat].beam_floor<0||n.players[seat].beam_floor>239||
         n.players[seat].beam_y< -16||n.players[seat].beam_y>248)return 0;
@@ -960,6 +1017,7 @@ static int valid(const uint8_t *in,int len) {
 static int put(const uint8_t *in,int len){if(!valid(in,len))return 0;memset(&C,0,sizeof C);if(len)memcpy(&C,in,sizeof C);return 1;}
 static bool option(void *ctx,const char *name,const char *value) {
     (void)ctx;if(!strcmp(name,"--coop-report")){report=fopen(value,"w");return report!=NULL;}
+    if(!strcmp(name,"--coop-wait-both")){if(strcmp(value,"on")&&strcmp(value,"off"))return false;wait_both=!strcmp(value,"on");return true;}
     if(!strcmp(name,"--coop-view")) {
         if(strcmp(value,"shared")&&strcmp(value,"split")&&strcmp(value,"p1")&&strcmp(value,"p2"))return false;
         int was_independent=mm1_coop_independent();
@@ -992,10 +1050,11 @@ const CycHostExtras *mm1_coop_extras(void) {
     static const CycHostOption options[]={{"--coop",true,"on|off: development co-op controller slice"},
         {"--coop-p1",true,"megaman|protoman: complementary character roster"},
         {"--coop-view",true,"shared|split|p1|p2: co-op view"},
+        {"--coop-wait-both",true,"on|off: wait for both players at native room links (default off)"},
         {"--coop-test-poke",true,"FRAME:SEAT:ADDRESS:VALUE: bounded personal RAM precondition"},
         {"--coop-report",true,"FILE: personal controller observations"}};
     static const CycHostExtras extras={.power_on=power_on,.input=input,.frame_end=frame_end,.state_loaded=state_loaded,.tcp_setup=tcp_setup,
-        .option=option,.options=options,.option_count=5};return &extras;
+        .option=option,.options=options,.option_count=6};return &extras;
 }
 NES_MOD_CONSTRUCTOR(register_mm1_coop) {
 #ifdef MM1_PROFILE_USA
@@ -1015,6 +1074,7 @@ NES_MOD_CONSTRUCTOR(register_mm1_coop) {
        !nes_mod_register_function_entry_plugin("mm1.coop.private-oam-full",0xD2A6,private_oam_full)||
        !nes_mod_register_function_entry_plugin("mm1.coop.room-next",0x92A6,room_begin)||
        !nes_mod_register_function_entry_plugin("mm1.coop.room-previous",0x925B,room_begin)||
+       !nes_mod_register_function_entry_plugin("mm1.coop.room-gate",0x9207,room_gate)||
        !nes_mod_register_function_entry_plugin("mm1.coop.controller-completed",0x918A,controller_completed)||
        !nes_mod_register_function_entry_plugin("mm1.coop.pit-continuation",0x9251,pit_continuation)||
        !nes_mod_register_function_entry_plugin("mm1.coop.private-scroll-left",0x9F9E,private_scroll)||

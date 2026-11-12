@@ -1,7 +1,7 @@
-"""Either player climbs the authored Cut Man link through its native script.
+"""Either player takes authored Cut Man links through the original scripts.
 
-The fixture bypasses earlier traversal by positioning both bodies in room3.
-The UP input must trigger the real exit, scroll, room tables and follower result.
+The fixture supplies source-room bounds/order and body positions, bypassing
+earlier traversal. Controller input must trigger the real exit and destination.
 """
 import argparse,json,os,pathlib,subprocess,wave
 from views import records
@@ -14,14 +14,26 @@ def main():
     p.add_argument('--smoke-only',action='store_true')
     p.add_argument('--distant-partner',action='store_true',help='Leave the other body in the starting page before the real link')
     p.add_argument('--pit',action='store_true',help='An invalid native downward exit kills only that personal body')
-    p.add_argument('--link',choices=('ladder','first-door','second-door'),default='ladder')
+    p.add_argument('--link',choices=('ladder','down-ladder','first-door','second-door'),default='ladder')
+    p.add_argument('--wait-both',action='store_true')
+    p.add_argument('--partner-pit',action='store_true',help='A waiting player must proceed after the partner takes a real native pit death')
     a=p.parse_args();a.exe=a.exe.resolve();a.out.mkdir(parents=True,exist_ok=True)
     assert not a.pit or a.link=='ladder'
-    source,begin,order,target,end=(3,0,0,4,4) if a.link=='ladder' else (19,18,11,20,22) if a.link=='first-door' else (22,20,12,23,23)
+    assert not a.partner_pit or a.wait_both and a.link=='ladder'
+    vertical=a.link in ('ladder','down-ladder');down=a.link=='down-ladder'
+    source,begin,order,target,end=(3,0,0,4,4) if a.link=='ladder' else (4,4,1,0,3) if down else (19,18,11,20,22) if a.link=='first-door' else (22,20,12,23,23)
+    arrival=end if down else target
+    direction='DOWN' if down else 'UP' if vertical else 'RIGHT'
     key='2:' if a.leader==2 else ''
     lines=['0 -','0 2:-','180 START','181 -','360 START','361 -','1490 POKE 001A 00',f'1490 POKE 001B {source:02X}',
-        f'1491 {key}'+('UP' if a.link=='ladder' else 'RIGHT'),f'1520 {key}-']
+        f'1491 {key}{direction}',f'1520 {key}-']
     if a.link!='ladder':lines+= [f'1490 POKE 0027 {begin:02X}',f'1490 POKE 0028 {source:02X}',f'1490 POKE 0029 {order:02X}']
+    if a.wait_both:
+        assert not a.pit and not a.distant_partner and a.link!='second-door'
+        other='2:' if a.leader==1 else ''
+        lines=[s for s in lines if not s.startswith('1520 ')]
+        if not a.partner_pit:lines += [f'1580 {other}{direction}',f'1640 {other}-']
+        lines += [f'1640 {key}-']
     if a.pit:
         other='2:' if a.leader==1 else ''
         lines=lines[:8]+[f'1580 {other}LEFT',f'1610 {other}-']
@@ -29,29 +41,39 @@ def main():
     pokes=[]
     for seat in (1,2):
         leading=seat==a.leader
-        values={0x460:begin if a.distant_partner and not leading else source,0x480:104 if a.distant_partner and not leading else 216 if a.link=='ladder' else 248,
-            0x600:8 if leading and a.link=='ladder' else 180 if a.link=='ladder' else 148,0x400:21 if leading and a.link=='ladder' else 0,
-            0x420:80 if leading and a.link=='ladder' else 64,0x440:0,0x640:0,0x680:0,0x660:0,0x4A0:0,0x620:0,
-            0x30:12 if leading and a.link=='ladder' else 0,0x55:255,0x6A:20 if seat==1 else 24,0x6F:7 if seat==1 else 19}
+        values={0x460:begin if a.distant_partner and not leading else source,0x480:104 if a.distant_partner and not leading else 216 if vertical else 248,
+            0x600:(232 if down else 8) if leading and vertical else 180 if vertical else 148,0x400:21 if leading and vertical else 0,
+            0x420:80 if leading and vertical else 64,0x440:0,0x640:0,0x680:0,0x660:0,0x4A0:0,0x620:0,
+            0x30:12 if leading and vertical else 0,0x55:255,0x6A:20 if seat==1 else 24,0x6F:7 if seat==1 else 19}
         if a.pit:values.update({0x460:2 if leading else 0,0x480:176 if leading else 64,
             0x600:236 if leading else 180,0x400:9 if leading else 0,0x420:64,0x30:0,0x680:254 if leading else 0})
+        if a.wait_both and not leading:
+            values.update({0x480:216 if vertical else 176,0x600:(200 if down else 40) if vertical else 148,
+                0x400:21 if vertical else 0,0x420:80 if vertical else 64,0x30:12 if vertical else 0})
+        if a.wait_both:
+            for addr in (0x440,0x4A0,0x620,0x640):values.pop(addr)
         for addr,value in values.items():pokes+=['--coop-test-poke',f'1490:{seat}:{addr:X}:{value:X}']
+    if a.partner_pit:
+        for addr,value in {0x460:2,0x480:176,0x600:236,0x400:9,0x420:64,0x680:254,0x660:0}.items():
+            pokes+=['--coop-test-poke',f'1580:{3-a.leader}:{addr:X}:{value:X}']
     route=a.out/'input.txt';route.write_text('\n'.join(sorted(lines,key=lambda s:int(s.split()[0])))+'\n')
     env=dict(os.environ,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy',NESRECOMP_NO_LAUNCHER='1')
-    base=[str(a.exe),str(a.rom.resolve()),'--frames','1750','--input',str(route),'--coop','on','--coop-view',a.view,
+    final_frame=1830 if a.wait_both else 1750
+    base=[str(a.exe),str(a.rom.resolve()),'--frames',str(final_frame),'--input',str(route),'--coop','on','--coop-view',a.view,
+        '--coop-wait-both','on' if a.wait_both else 'off',
         '--charge','off','--slide','off','--weapon-cycle','on','--widescreen','off','--no-save',
         '--config',str(a.out/'test.ini'),*pokes]
     def run(name,extra=()):
         with (a.out/(name+'.log')).open('w') as log:subprocess.run(base+[
             '--coop-report',str(a.out/(name+'.jsonl')),'--frame-log',str(a.out/(name+'.frames')),
-            '--frame-log-frames','1490:1749','--hash-out',str(a.out/(name+'.hash')),
+            '--frame-log-frames',f'1490:{final_frame-1}','--hash-out',str(a.out/(name+'.hash')),
             '--present-out',str(a.out/(name+'.png')),'--wav-out',str(a.out/(name+'.wav')),*extra],
             cwd=a.exe.parent,env=env,check=True,stdout=log,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW)
         return {r['frame']:r for r in map(json.loads,(a.out/(name+'.jsonl')).read_text().splitlines())}
     pit_state=a.out/'pit.cycstate'
     rows=run('native',('--save-state',f'1490:{pit_state}','--present-every','1490') if a.pit else ())
-    parts=records(a.out/'native.frames',True);memory={f:v[0] for f,v in parts.items()};m=memory[1750]
-    assert rows[1750]['failures']==0,rows[1750]
+    parts=records(a.out/'native.frames',True);memory={f:v[0] for f,v in parts.items()};m=memory[final_frame]
+    assert rows[final_frame]['failures']==0,rows[final_frame]
     if a.pit:
         victim=a.leader-1;peer=victim^1;last=rows[1750]
         assert last['dead'][victim] and not last['dead'][peer] and last['hp'][victim]==0,last
@@ -73,9 +95,19 @@ def main():
             personal_pit_death_survivor_control=True,one_living_partner_no_life_used=True,
             current_pit_state_pixels_pcm_exact=True,native_interpreter_exact=True)
         (a.out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary));return
-    assert (m[0x27],m[0x28],m[0x29])==(target,end,order+1),('Native room script did not complete',m[0x27:0x2A],rows[1750])
-    assert [x//256 for x in rows[1750]['x']]==[target,target],('Partner did not follow the native scroll',rows[1750])
-    assert rows[1750]['hp']==[20,24] and [v[4] for v in rows[1750]['ammo']]==[7,19],rows[1750]
+    assert (m[0x27],m[0x28],m[0x29])==(target,end,order+(-1 if down else 1)),('Native room script did not complete',m[0x27:0x2A],rows[final_frame])
+    if a.partner_pit:
+        assert rows[final_frame]['x'][a.leader-1]//256==arrival and rows[final_frame]['dead'][2-a.leader],rows[final_frame]
+        assert rows[final_frame]['lives']==2 and rows[final_frame]['wipes']==0,rows[final_frame]
+    else:assert [x//256 for x in rows[final_frame]['x']]==[arrival,arrival],('Partner did not follow the native scroll',rows[final_frame])
+    expected_hp=[20,24]
+    if a.partner_pit:expected_hp[2-a.leader]=0
+    assert rows[final_frame]['hp']==expected_hp and [v[4] for v in rows[final_frame]['ammo']]==[7,19],rows[final_frame]
+    if a.wait_both:
+        pending=rows[1550];assert tuple(memory[1550][0x27:0x2A])==(begin,source,order),pending
+        if vertical:assert pending['waiting']==1<<(a.leader-1) and pending['y'][a.leader-1]==248,pending
+        else:assert not pending['waiting'] and pending['x'][a.leader-1]==source*256+232,pending
+        assert rows[final_frame]['waiting']==0 and rows[final_frame]['wait_both']==1,rows[final_frame]
     level=a.rom.read_bytes()[16:16+16384]
     def native_grid(frame,screen):
         nt=parts[frame][1];base=(screen&1)*1024;room=level[0xC00+screen]
@@ -91,20 +123,20 @@ def main():
                 actual_palette=(nt[base+960+y//4*8+x//4]>>shift)&3
                 if nt[base+y*32+x]!=tile or actual_palette!=palette:different.append((x,y))
         assert not different,('Native tile/palette ring differs',frame,screen,len(different),different[:8])
-    if a.link=='ladder':native_grid(1750,target)
+    if vertical:native_grid(final_frame,arrival)
     first_native=None
     if a.distant_partner and a.leader==2 and a.view=='shared':
         first_native=next((f for f,m in memory.items() if m[0x1A:0x1C]==bytes((0,source)) and
             m[0x27:0x29]==bytes((begin,source)) and not m[0x1E] and rows[f]['shown_owner']==1),None)
         assert first_native,'No actual new-owner native source frame was observed'
-        if a.link=='ladder':native_grid(first_native,source)
-    scrolling=[frame for frame,m in memory.items() if m[0x26] and (m[0x1E] if a.link=='ladder' else m[0x1A])]
+        if vertical:native_grid(first_native,source)
+    scrolling=[frame for frame,m in memory.items() if m[0x26] and (m[0x1E] if vertical else m[0x1A])]
     assert scrolling,'No actual native scroll observed'
-    if a.link!='ladder':
+    if not vertical:
         start=1 if a.link=='first-door' else 10
         assert any(start<=v[0x59]<start+8 and v[0x5A] and v[0x6A0] for v in memory.values()),'No native shutter animation observed'
     if a.smoke_only:print(json.dumps(dict(result='pass',leader=a.leader,link=a.link,native_scroll=True)));return
-    checkpoint=scrolling[len(scrolling)//2]-1;state=a.out/'scroll.cycstate'
+    checkpoint=1549 if a.wait_both else scrolling[len(scrolling)//2]-1;state=a.out/'scroll.cycstate'
     run('producer',('--save-state',f'{checkpoint}:{state}','--present-every',str(checkpoint)))
     assert (a.out/'native.hash').read_bytes()==(a.out/'producer.hash').read_bytes()
     run('instant',('--load-state',str(state),'--frames',str(checkpoint+1)))
@@ -119,9 +151,9 @@ def main():
     run('interpreter',('--interp-only',))
     assert (a.out/'native.hash').read_bytes()==(a.out/'interpreter.hash').read_bytes()
     assert (a.out/'native.png').read_bytes()==(a.out/'interpreter.png').read_bytes()
-    summary=dict(result='pass',leader=a.leader,view=a.view,link=a.link,distant_partner=a.distant_partner,native_link_and_both_follow=True,
+    summary=dict(result='pass',leader=a.leader,view=a.view,link=a.link,wait_both=a.wait_both,partner_pit=a.partner_pit,distant_partner=a.distant_partner,native_link_and_living_follow=True,
         own_health_ammo_retained=True,earlier_traversal_bypassed=True,injected_scroll=False,
-        actual_scroll_frames=len(scrolling),native_tile_and_palette_cells_exact=960 if a.link=='ladder' else 0,
+        actual_scroll_frames=len(scrolling),native_tile_and_palette_cells_exact=960 if vertical else 0,
         first_new_native_source_frame=first_native,native_interpreter_exact=True,current_scroll_pixels_pcm_exact=True)
     (a.out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary))
 

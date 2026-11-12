@@ -224,7 +224,7 @@ static bool option(void *ctx,const char *name,const char *value) {
     if(!strcmp(name,"--widescreen-report")) {report=fopen(value,"w");return report!=NULL;}
     return false;
 }
-static void power_on(void *ctx) {(void)ctx;memset(&ws,0,sizeof ws);report_frame=0;game_reset();game_views_reset();}
+static void power_on(void *ctx) {(void)ctx;memset(&ws,0,sizeof ws);report_frame=0;game_reset();game_views_reset();mm1_world_cancel_rebase();}
 static int save_packets(uint8_t *buf,int cap) {
     if(cap<(int)sizeof ws)return -1;memcpy(buf,&ws,sizeof ws);return sizeof ws;
 }

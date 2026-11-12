@@ -13,6 +13,8 @@ static const uint16_t hook_addrs[]={MM_DRAW,MM_EMIT,MM_BUILD,0x9951,0xBE81,MM_SP
 #include "widescreen_common.h"
 
 static uint8_t level[0x4000],graphics[0x4000];
+typedef struct {uint8_t pending,stage;uint16_t camera;uint8_t nt[2048];} CameraRebase;
+static CameraRebase camera_rebase;
 static int cached_stage=-1,graphics_ready;
 static uint8_t repair[256*240];
 static int draw_pending,draw_first,draw_camera;
@@ -109,6 +111,16 @@ static int cache_rom(void) {
     int stage=R(0x31);
     if(cached_stage!=stage)graphics_ready=0;
     if(!graphics_ready && R(0x42)==6) {for(int i=0;i<0x4000;i++)graphics[i]=R(0x8000+i);graphics_ready=1;}
+#ifdef MM1_PROFILE_USA
+    /* Native-size co-op also needs authored object IDs for a distant room
+       initiator. Its immutable bank cache cannot depend on a wide draw. */
+    if(!graphics_ready) {
+        CycModRegs r={0};cyc_mod_regs(&r);if(!cyc_mod_isolate_begin())return 0;
+        int ok=cyc_mod_call(0xC413,&r);
+        if(ok)for(int i=0;i<0x4000;i++)graphics[i]=R(0x8000+i);
+        cyc_mod_isolate_end();if(!ok){failures++;return 0;}graphics_ready=1;
+    }
+#endif
     if(cached_stage==stage)return 1;
     CycModRegs regs;cyc_mod_regs(&regs);
     if(!cyc_mod_isolate_begin())return 0;
@@ -149,6 +161,40 @@ static int game_bg(int wx,int wy,int *tile,int *pal) {
     *tile=(level[block*4+quad]*4+((wx&8)?2:0)+((wy&8)?1:0))&255;
     *pal=(level[0x300+block]>>(((wy&16)?4:0)+((wx&16)?2:0)))&3;
     return 1;
+}
+int mm1_world_exit_allowed(int direction,int camera,int flags) {
+    if(direction<1||direction>4||(direction==1&&!(flags&16))||(camera&255)||!cache_rom())return 0;
+    int order=R(0x29),screen=camera>>8;
+    if(screen==R(0x27)&&order&&level[0xC70+order]&R(0x938B+direction))return 1;
+    return screen==R(0x28)&&(level[0xC71+order]&R(0x938F+direction))!=0;
+}
+void mm1_world_cancel_rebase(void){memset(&camera_rebase,0,sizeof camera_rebase);}
+int mm1_world_rebase(int camera) {
+    if(camera==game_camera())return 1;if(camera<0||camera>47*256||!cache_rom()||!graphics_ready)return 0;
+    CameraRebase next={0};next.pending=1;next.stage=R(0x31);next.camera=(uint16_t)camera;
+    /* Keep the same rolling512 columns that native horizontal streaming
+       prefetches128 pixels before the view. Commit at actual DMA, so an old
+       physical OAM/background frame survives a logical owner change intact. */
+    int start=(camera-128)&~31;
+    for(int col=0;col<64;col++)for(int row=0;row<30;row++) {
+        int wx=start+col*8,tile=0,pal=0;if(!game_bg(wx,row*8,&tile,&pal))continue;
+        int nt=(wx>>8)&1,x=(wx>>3)&31;next.nt[nt*1024+row*32+x]=(uint8_t)tile;
+        int at=nt*1024+960+(row/4)*8+x/4,shift=((row&2)?4:0)+((x&2)?2:0);
+        next.nt[at]=(uint8_t)((next.nt[at]&~(3<<shift))|(pal<<shift));
+    }
+    CycModRegs r={0};cyc_mod_regs(&r);if(!cyc_mod_isolate_begin())return 0;
+    W(0x1A,camera);W(0x1B,camera>>8);int ok=cyc_mod_call(0xCD72,&r),active=R(0x8E);cyc_mod_isolate_end();if(!ok)return 0;
+    int stage=R(0x31),ptr=(graphics[0x2452+stage*2]|graphics[0x2453+stage*2]<<8)-0x8000,first=0;
+    if(ptr<0||ptr>=0x4000)return 0;
+    for(;first<255&&ptr+first*4+3<0x4000;first++) {
+        const uint8_t *v=graphics+ptr+first*4;if(v[0]>=48||v[0]*256+v[1]>=camera)break;
+    }
+    camera_rebase=next;W(0x1A,camera);W(0x1B,camera>>8);W(0x8E,active);W(0x8B,first-1);W(0x8C,first);W(0x8D,1);return 1;
+}
+static void apply_camera_rebase(void) {
+    if(!camera_rebase.pending)return;
+    if(camera_rebase.stage==R(0x31)&&!cyc_mod_ciram_upload(0,camera_rebase.nt,sizeof camera_rebase.nt))failures++;
+    camera_rebase.pending=0;
 }
 
 static void capture_actor(void) {
@@ -251,7 +297,7 @@ static int hook(uint16_t addr) {
         if(addr==MM_EMIT){CycModRegs r={0};cyc_mod_regs(&r);mm1_proto_part_emitted(r.x/4+1);}
         return 0;
     }
-    if(addr==MM_DMA0){int previous=mm1_coop_dma_begin();mm1_weapon_gfx_latch();if(!mm1_coop_independent_scene())mm1_proto_draw_latch();mm1_coop_video_latch();game_views_latch();
+    if(addr==MM_DMA0){apply_camera_rebase();int previous=mm1_coop_dma_begin();mm1_weapon_gfx_latch();if(!mm1_coop_independent_scene())mm1_proto_draw_latch();mm1_coop_video_latch();game_views_latch();
         mm1_coop_present_end(previous);if(enabled||mm1_coop_independent())dma_packet();return 0;}
     if(addr==MM_BUILD){
         mm1_coop_intro_draw();
@@ -390,13 +436,14 @@ static int game_render_views(uint32_t *out,int width,int height,const uint32_t *
     }else view_scene(out,mode==3);
     cyc_render_set_native_origin(0);return 1;
 }
-typedef struct {char magic[4];ViewFrame build,shown;} ViewsState;
+typedef struct {char magic[4];ViewFrame build,shown;CameraRebase rebase;} ViewsState;
 static int views_get(uint8_t *out,int cap) {
-    if(cap<(int)sizeof(ViewsState))return -1;ViewsState s={0};memcpy(s.magic,"MV02",4);s.build=view_build;s.shown=view_shown;
+    if(cap<(int)sizeof(ViewsState))return -1;ViewsState s={0};memcpy(s.magic,"MV03",4);s.build=view_build;s.shown=view_shown;s.rebase=camera_rebase;
     memcpy(out,&s,sizeof s);return sizeof s;
 }
 static int views_valid(const uint8_t *in,int size) {
-    if(!size)return 1;ViewsState s;if(!in||size!=sizeof s)return 0;memcpy(&s,in,sizeof s);if(memcmp(s.magic,"MV02",4))return 0;
+    if(!size)return 1;ViewsState s;if(!in||size!=sizeof s)return 0;memcpy(&s,in,sizeof s);if(memcmp(s.magic,"MV03",4)||s.rebase.pending>1||
+        (s.rebase.pending&&(s.rebase.stage>=10||s.rebase.camera>47*256)))return 0;
     const ViewFrame *v[]={&s.build,&s.shown};for(int k=0;k<2;k++) {
         if(v[k]->active>1||v[k]->native_scene>1||v[k]->native_script>1||v[k]->odd>1||v[k]->ready>1||(v[k]->active&&v[k]->stage>=10))return 0;
         for(int seat=0;seat<2;seat++) {
@@ -410,7 +457,8 @@ static int views_valid(const uint8_t *in,int size) {
     }return 1;
 }
 static int views_set(const uint8_t *in,int size) {
-    if(!views_valid(in,size))return 0;if(size){ViewsState s;memcpy(&s,in,size);view_build=s.build;view_shown=s.shown;}else game_views_reset();return 1;
+    if(!views_valid(in,size))return 0;if(size){ViewsState s;memcpy(&s,in,size);view_build=s.build;view_shown=s.shown;camera_rebase=s.rebase;}
+    else {game_views_reset();mm1_world_cancel_rebase();}return 1;
 }
 NES_MOD_CONSTRUCTOR(register_mm1_views) {
     nes_mod_register_savestate_hook("mm1.coop.views",views_get,views_set);nes_mod_register_savestate_validator("mm1.coop.views",views_valid);

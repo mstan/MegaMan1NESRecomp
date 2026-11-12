@@ -361,3 +361,39 @@ bytes = "A9 02 D0 02 A9 04 3D 20"
 id = "mm1.coop.weapon-local"
 addr = 0xC9C2
 bytes = "A9 04 3D 20 04 D0 02 18"
+
+[[mod_function_hook]]
+id = "mm1.coop.room-next"
+addr = 0x92A6
+bank = 5
+bytes = "20 05 A1 A6 28 E8 8A 48"
+
+[[mod_function_hook]]
+id = "mm1.coop.room-previous"
+addr = 0x925B
+bank = 5
+bytes = "A6 27 CA 86 28 C6 29 A4"
+
+[[mod_function_hook]]
+id = "mm1.coop.controller-completed"
+addr = 0x918A
+bank = 5
+bytes = "20 A8 94 A5 94 F0 09 A5"
+
+[[mod_function_hook]]
+id = "mm1.coop.pit-continuation"
+addr = 0x9251
+bank = 5
+bytes = "4C 19 C2 A9 00 85 26 4C"
+
+[[mod_function_hook]]
+id = "mm1.coop.private-scroll-left"
+addr = 0x9F9E
+bank = 5
+bytes = "A9 01 85 8D A9 00 85 1C"
+
+[[mod_function_hook]]
+id = "mm1.coop.private-scroll-right"
+addr = 0x9F6D
+bank = 5
+bytes = "A9 41 85 8D A2 00 86 1C"

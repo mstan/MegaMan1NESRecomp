@@ -46,4 +46,7 @@ void mm1_coop_paint(uint32_t *out,int width,int x0,const uint8_t *coverage);
 void mm1_coop_paint_actor(uint32_t *out,int width,int x0,const uint8_t *coverage,int actor);
 int mm1_world_prepare(void);
 int mm1_world_probe(int x,int y);
+int mm1_world_exit_allowed(int direction,int camera,int flags);
+int mm1_world_rebase(int camera);
+void mm1_world_cancel_rebase(void);
 const CycHostExtras *mm1_coop_extras(void);

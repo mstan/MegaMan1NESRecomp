@@ -3,11 +3,12 @@ import argparse,json,os,pathlib,struct,subprocess,sys,wave
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent.parent/'protoman'))
 from validate import pixels
 
-def records(path):
+def records(path,include_ciram=False):
     data=path.read_bytes();offset=12;out={}
     while offset<len(data):
         h=struct.unpack_from('<9I',data,offset)
-        out[h[0]+1]=data[offset+324:offset+324+2048]
+        ram=data[offset+324:offset+324+2048]
+        out[h[0]+1]=(ram,data[offset+324+h[3]:offset+324+h[3]+h[4]]) if include_ciram else ram
         offset+=324+sum(h[3:])
     return out
 
@@ -17,6 +18,7 @@ def main():
     p.add_argument('--native-oracle',action='store_true',help='Compare complete native grids with the retail draw path')
     p.add_argument('--pool-retry',action='store_true',help='A full native pool must retry a peer-view constructor after a slot is free')
     p.add_argument('--projectile-crossing',action='store_true',help='A native player shot must cross the primary window into the peer grid')
+    p.add_argument('--scroll-ownership',action='store_true',help='A distant moving guest must preserve the main native terrain ring')
     a=p.parse_args();a.exe=a.exe.resolve();a.out.mkdir(parents=True,exist_ok=True)
     lines=['0 -','0 2:-','180 START','181 -','360 START','361 -','1300 POKE 005D FE',
         '1420 X2:R','1421 X2:-','1432 X2:R','1433 X2:-','1510 2:B','1511 2:-']
@@ -42,6 +44,32 @@ def main():
             '--wav-out',str(a.out/(name+'.wav')),*extra],cwd=a.exe.parent,env=env,
             check=True,stdout=log,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW)
         return {r['frame']:r for r in map(json.loads,(a.out/(name+'.jsonl')).read_text().splitlines())}
+    if a.scroll_ownership:
+        base=base[:base.index('--coop-test-poke')];pokes=[]
+        for seat,x in ((1,104),(2,816)):
+            for addr,value in {**pose,0x460:x//256,0x480:x%256}.items():
+                pokes+=['--coop-test-poke',f'1490:{seat}:{addr:X}:{value:X}']
+        base+=pokes
+        lines=['0 -','0 2:-','180 START','181 -','360 START','361 -','1500 2:LEFT','1530 2:-']
+        for slot in range(16,32):lines.append(f'1498 POKE {0x600+slot:04X} F8')
+        route.write_text('\n'.join(sorted(lines,key=lambda s:int(s.split()[0])))+'\n')
+        extra=('--widescreen','fit','--present-size','2560x720')
+        rows=run('moving','shared',(*extra,'--frame-log',str(a.out/'moving.frames'),'--frame-log-frames','1539:1539'))
+        assert rows[1540]['x'][0]==104 and rows[1540]['x'][1]<796 and rows[1540]['failures']==0,rows[1540]
+        lines=[s for s in lines if s not in ('1500 2:LEFT','1530 2:-')]
+        route.write_text('\n'.join(sorted(lines,key=lambda s:int(s.split()[0])))+'\n')
+        run('reference','shared',(*extra,'--frame-log',str(a.out/'reference.frames'),'--frame-log-frames','1539:1539'))
+        actual_nt=records(a.out/'moving.frames',True)[1540][1][:1024]
+        expected_nt=records(a.out/'reference.frames',True)[1540][1][:1024]
+        different=sum(x!=y for x,y in zip(actual_nt,expected_nt))
+        assert different==0,('Guest camera streamed into the native primary ring',different)
+        w,h,actual=pixels(a.out/'moving.png');rw,rh,expected=pixels(a.out/'reference.png')
+        assert (w,h,rw,rh)==(854,240,854,240)
+        different=sum(actual[y][x*3:x*3+3]!=expected[y][x*3:x*3+3] for y in range(240) for x in range(256))
+        assert different==0,('Native primary terrain picture changed',different)
+        summary=dict(result='pass',actual_far_guest_movement=True,native_primary_ring_bytes_exact=1024,
+            native_primary_pixels_exact=256*240,shared_fit_width=854)
+        (a.out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary));return
     if a.projectile_crossing:
         base=base[:base.index('--coop-test-poke')]
         lines=['0 -','0 2:-','180 START','181 -','360 START','361 -','1510 B','1511 -']

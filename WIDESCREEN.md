@@ -50,12 +50,22 @@ scripts display their original particles and HUD policy in both grids.
 Original native overlap tests run in the distant player's local coordinates,
 so contacts, personal refills, shared pickups and weapon hits work beyond the
 primary camera as well.
+Native room admission uses the initiating body's original exit and room tables.
+The other living body follows native movement while retaining its own health,
+ammo and colors. Native camera changes rebuild the rolling terrain window at
+actual sprite DMA. A guest's temporary camera does not stream into that common
+window; native block mutations remain shared.
 
 Targeted Cut Man checks cover full native grid images for both characters,
 both complete inventory panels, peer-only ordinary spawning, gap exclusion,
 full-pool retry, cross-view shots and distant survivor handoff. Split, P1 and P2
 share canonical simulation hashes. Current-build state, immediate presentation,
 audio continuation and native/interpreter agreement are also checked.
+The first Cut Man ladder link has checks for both leaders, distant admission at
+the original aspect, exact native tiles/palettes and current-build mid-scroll
+continuation. Both players' invalid downward exits also exercise personal pit
+death and continued partner control. These checks bypass earlier traversal and
+do not establish full-stage or all-room coverage.
 
 ## Verification
 

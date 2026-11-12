@@ -76,6 +76,13 @@ and current-build state/audio continuation.
 Native contact and weapon overlap tests also use the distant player's local
 coordinates. Targeted checks cover both characters' damage, personal refills,
 shared extra lives, charged shots and reflected shots beyond the main camera.
+Either player can initiate the native Cut Man ladder link into the next room;
+the partner follows the original scroll while keeping personal health and ammo.
+Targeted checks cover both leaders, a distant initiator at the original aspect,
+the native terrain ring, and mid-scroll state/audio continuation. A pit kills
+only that character while the survivor continues, without spending a shared life.
+Guest movement keeps native collision without streaming another background into
+the main player's view; native weapon changes still update the shared blocks.
 Full-stage transition coverage and online play are still being implemented;
 the Co-op package is not exposed in the Mods catalog yet.
 

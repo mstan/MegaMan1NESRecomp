@@ -38,7 +38,7 @@ typedef struct {
 typedef struct {
     char magic[4];uint8_t on,initialized,stage,current,in_guest,drawing,roster,anchor,independent;
     Player players[2];Picture building,shown,view_build[2],view_shown[2];uint8_t oam[256];
-    uint8_t view_ready,view_drawing,view_visible;
+    uint8_t view_ready,view_drawing,view_visible,room_follow,skip_controller;
     uint64_t draw_mask;uint8_t draw_oam[256];
     uint64_t primary_build_mask;uint8_t primary_oam[256];int16_t insert_slot;uint8_t primary_cursor,primary_seen,pair_ready;
     uint32_t test_applied;
@@ -60,13 +60,15 @@ static int test_poke_count;
 static int private_camera,private_full;
 static int16_t private_x[64];
 static uint8_t private_actor[64];
+static int private_exit,private_exit_camera;
 static int begin_team_death(void);
 static void enforce_dead(void);
 static void hide_dead_body(void);
 static void particle_step(Player *p);
 static void lifecycle_tick(void);
+static void follow_partner(void);
 static int unavailable(int seat){Player *p=&C.players[seat];return p->dead||((C.withdrawn&(1u<<seat))&&p->teleport!=TELE_IN&&p->teleport!=TELE_OPEN);}
-int mm1_coop_seat_blocked(int seat){return enabled&&C.initialized&&(C.players[seat].dead||C.players[seat].teleport||C.players[seat].transport_dispatched);}
+int mm1_coop_seat_blocked(int seat){return enabled&&C.initialized&&(C.players[seat].dead||C.players[seat].teleport||C.players[seat].transport_dispatched||(C.room_follow&(1u<<seat)));}
 int mm1_coop_controller_blocked(void){return mm1_coop_seat_blocked(C.current)&&!(C.in_guest&&C.players[C.current].teleport==TELE_OPEN);}
 int mm1_coop_transporting(void){return enabled&&C.initialized&&C.players[C.current].teleport&&C.players[C.current].teleport!=TELE_HIDDEN;}
 int mm1_coop_view_active(void){
@@ -220,12 +222,13 @@ static unsigned weapon_world_address(int i) {
     return 0x721+(i-0xD1)*6;
 }
 static int private_call(uint16_t address,CycModRegs *regs,int limit,int hooks) {
+    if(address==0x94A8)private_exit=0;
     if(!cyc_mod_isolate_begin())return 0;
-    if(address==0x94A8&&mm1_coop_independent_scene()) {
-        int left[2];if(mm1_coop_view_rects(left)) {
-            W(0x1A,left[C.current]);W(0x1B,left[C.current]>>8);
-            if(!cyc_mod_call(0xCD72,regs)){cyc_mod_isolate_end();return 0;}
-        }
+    if(address==0x94A8&&enabled&&C.initialized) {
+        int camera=R(0x460)*256+R(0x480)-128,lo=R(0x27)*256,hi=R(0x28)*256;
+        if(camera<lo)camera=lo;if(camera>hi)camera=hi;
+        W(0x1A,camera);W(0x1B,camera>>8);
+        if(!cyc_mod_call(0xCD72,regs)){cyc_mod_isolate_end();return 0;}
     }
     if(limit)W(0x54,16);
     /* The retail controller leaves actor zero as the collision reference for
@@ -241,6 +244,11 @@ static int private_call(uint16_t address,CycModRegs *regs,int limit,int hooks) {
     }
     if(hooks)cyc_mod_allow_isolated_hooks(true);
     int ok=cyc_mod_call(address,regs);
+    if(ok&&address==0x94A8&&R(0x26)) {
+        int direction=R(0x26),camera=R(0x1A)+R(0x1B)*256;
+        if(mm1_world_exit_allowed(direction,camera,R(0x420))){private_exit=direction;private_exit_camera=camera;}
+        else if(direction==3)ok=cyc_mod_call(0xC219,regs);
+    }
     uint8_t result[MAX_PERSONAL],sound[16],world[WEAPON_WORLD_BYTES];int count=0;
     if(ok) {
         if(C.drawing) {
@@ -335,6 +343,49 @@ static void clear_combat(void) {
     for(int slot=2;slot<16;slot++)W(0x600+slot,248);
     for(int a=0x5A0;a<0x600;a++)W(a,0);
     W(0x60,0);W(0x61,0);W(0x640,0);W(0xAD,0);W(0x14,0);W(0x16,0);W(0x18,0);
+}
+static void follow_partner(void) {
+    if(!C.room_follow||C.current!=C.anchor)return;
+    /* The real scroll owns the entry position, ladder and animation. Keep
+       each follower's health, equipment, ammo and colors in its own domain. */
+    static const uint16_t fields[]={0x2D,0x2E,0x30,0x94,0x95,0x98,0x99,0x9B,
+        0x400,0x420,0x440,0x460,0x480,0x4A0,0x4C0,0x4E0,0x600,0x620,0x640,0x660,0x680,0x6A0};
+    for(int seat=0;seat<2;seat++)if(C.room_follow&(1u<<seat)) {
+        Player *p=&C.players[seat];if(p->dead||p->teleport||(C.withdrawn&(1u<<seat)))continue;
+        for(int i=0;i<sizeof fields/sizeof *fields;i++)personal(p,fields[i],R(fields[i]));
+    }
+}
+static int room_begin(uint16_t address) {
+    (void)address;if(!enabled||!C.initialized||C.wiping||cyc_mod_isolated())return 0;
+    int other=C.anchor^1;Player *p=&C.players[other];if(p->dead||p->teleport||(C.withdrawn&(1u<<other)))return 0;
+    capture(&C.players[C.anchor]);C.current=(uint8_t)other;project(p);
+    mm1_charge_stage_enter();mm1_slide_stage_enter();clear_combat();capture(p);
+    C.current=C.anchor;project(&C.players[C.anchor]);
+    C.room_follow|=(uint8_t)(1u<<other);follow_partner();return 0;
+}
+static int controller_completed(uint16_t address) {
+    (void)address;if(!enabled||!C.skip_controller||cyc_mod_isolated())return 0;
+    C.skip_controller=0;CycModRegs r={0};cyc_mod_regs(&r);if(r.s<2){C.failures++;return 0;}
+    /* The initiating guest's original controller already ran. Enter its
+       caller's real918D continuation through an RTS, with no extra frame. */
+    unsigned stack=r.s;W(0x100|stack,0x91);stack=(stack-1)&255;W(0x100|stack,0x8C);stack=(stack-1)&255;
+    r.s=(uint8_t)stack;cyc_mod_set_regs(&r);return 1;
+}
+static int pit_continuation(uint16_t address) {
+    (void)address;if(cyc_mod_isolated()||!mm1_coop_personal_death())return 0;
+    /*9251 jumps to the nonreturning retail death script from the main loop,
+      unlike an ordinary contact's nested call. Personal death needs the
+      real end-of-frame continuation beneath the intercepted death RTS. */
+    CycModRegs r={0};cyc_mod_regs(&r);if(r.s<2){C.failures++;return 0;}
+    unsigned stack=r.s;W(0x100|stack,0x91);stack=(stack-1)&255;W(0x100|stack,0xC8);stack=(stack-1)&255;
+    r.s=(uint8_t)stack;cyc_mod_set_regs(&r);W(0x26,0);return 0;
+}
+static int private_scroll(uint16_t address) {
+    (void)address;
+    /* The guest controller owns native movement/collision, but its temporary
+       camera must not stream a second terrain ring into the common PPU.
+       Native Guts/Elec mutation packets remain on their original paths. */
+    return enabled&&C.in_guest&&!C.drawing&&cyc_mod_isolated();
 }
 static int living_visible(int seat) {
     Player *p=&C.players[seat];if(p->dead||p->teleport||(C.withdrawn&(1u<<seat))||!mm1_coop_read(seat,0x6A))return 0;
@@ -478,6 +529,10 @@ static int draw_part(uint16_t address) {
 }
 int mm1_coop_dispatch(void) {
     if(!enabled||C.wiping||C.in_guest||cyc_mod_isolated()||mm1_reflect_busy())return 0;
+    if(C.room_follow&&!R(0x26)&&!R(0x1E)&&!R(0x68)) {
+        follow_partner();for(int seat=0;seat<2;seat++)if(C.room_follow&(1u<<seat))C.players[seat].previous=C.players[seat].held;
+        C.room_follow=0;
+    }
     if(!mm1_controls_gameplay()&&(!C.initialized||R(0x31)>=10||R(0x54)!=32||R(0x1E)||R(0x26)||R(0x41)||mm1_controls_menu()))return 0;
     if(!C.initialized||C.stage!=R(0x31))initialize();
     for(int i=0;i<test_poke_count;i++)if(!(C.test_applied&(1u<<i))&&cyc_ring_frame>=test_pokes[i].frame) {
@@ -493,7 +548,8 @@ int mm1_coop_dispatch(void) {
     uint8_t held=(uint8_t)(p->held&~12);W(0x14,held);W(0x16,p->previous);W(0x18,held&~p->previous);p->previous=held;
     mm1_weapons_player_dispatch();mm1_charge_dispatch();
     int ok=private_call(0x94A8,&regs,0,1);
-    if(ok&&!p->dead){mm1_slide_after_run();mm1_slide_restore_input();ok=private_call(0xA35C,&regs,0,1);}
+    int lead=ok&&!p->dead&&private_exit;
+    if(ok&&!p->dead){mm1_slide_after_run();mm1_slide_restore_input();if(!lead)ok=private_call(0xA35C,&regs,0,1);}
     if(p->dead)enforce_dead();
     if(ok){capture(p);C.updates++;}else C.failures++;
     for(int i=0;i<2048;i++)after[i]=R(i);
@@ -502,7 +558,13 @@ int mm1_coop_dispatch(void) {
     if(ok&&after[0x45]>=original[0x45]&&after[0x45]<=16) {
         for(int i=original[0x45];i<after[0x45];i++)W(0x580+i,after[0x580+i]);W(0x45,after[0x45]);
     }
-    C.current=C.anchor;cyc_mod_set_regs(&original_regs);return C.pending_wipe?begin_team_death():0;
+    C.current=C.anchor;cyc_mod_set_regs(&original_regs);
+    if(C.pending_wipe)return begin_team_death();
+    if(lead&&ok) {
+        if(!mm1_world_rebase(private_exit_camera)){C.failures++;return 0;}
+        C.current=C.anchor=(uint8_t)guest;project(&C.players[guest]);C.skip_controller=1;C.handoffs++;W(0x26,private_exit);
+    }
+    return 0;
 }
 static uint16_t hit_flags(void) {
     uint16_t bits=0;for(int slot=16;slot<32;slot++)if(R(0x420+slot)&128)bits|=(uint16_t)(1u<<(slot-16));return bits;
@@ -646,6 +708,7 @@ void mm1_coop_frame_begin(void) {
     capture(&C.players[C.current]);C.current=C.anchor;project(&C.players[C.anchor]);C.world.refill_active=0;
 }
 void mm1_coop_draw_begin(void) {
+    if(enabled&&C.initialized&&!C.drawing&&!cyc_mod_isolated()&&C.current==C.anchor)follow_partner();
     if(!enabled||!C.initialized||C.drawing||cyc_mod_isolated()||C.current==C.anchor||C.world.draw_active)return;
     CycModRegs r={0};cyc_mod_regs(&r);C.world.draw_active=1;C.world.draw_owner=C.current;C.world.draw_stack=r.s;
     C.world.draw_total=R(0x54);W(0x54,mm1_coop_total());
@@ -697,11 +760,12 @@ static int script_owner(uint16_t address) {
 }
 void mm1_coop_stage_enter(void) {
     mm1_coop_menu_cancel();
+    mm1_world_cancel_rebase();C.skip_controller=0;
     C.restarting=(uint8_t)(C.wiping&&!C.game_over);C.initialized=0;C.wiping=C.pending_wipe=0;
     if(enabled)for(int seat=0;seat<2;seat++){C.current=(uint8_t)seat;mm1_charge_stage_enter();mm1_slide_stage_enter();}
     C.current=C.anchor=C.build_owner=C.shown_owner=0;C.building_guest_owner=C.shown_guest_owner=1;C.intro_picture=0;
     memset(&C.world,0,sizeof C.world);C.building.mask=C.shown.mask=0;C.pair_ready=0;
-    C.view_ready=C.view_drawing=C.view_visible=0;memset(C.view_build,0,sizeof C.view_build);memset(C.view_shown,0,sizeof C.view_shown);
+    C.view_ready=C.view_drawing=C.view_visible=C.room_follow=0;memset(C.view_build,0,sizeof C.view_build);memset(C.view_shown,0,sizeof C.view_shown);
 }
 void mm1_coop_video_latch(void) {
     if(!enabled)return;
@@ -823,6 +887,10 @@ static void set_enabled(int on) {
 #endif
     enabled=on!=0;if(enabled)mm1_proto_coop_enable();
     nes_mod_set_function_hook_enabled("mm1.coop.death",enabled);
+    nes_mod_set_function_hook_enabled("mm1.coop.room-next",enabled);nes_mod_set_function_hook_enabled("mm1.coop.room-previous",enabled);
+    nes_mod_set_function_hook_enabled("mm1.coop.controller-completed",enabled);
+    nes_mod_set_function_hook_enabled("mm1.coop.pit-continuation",enabled);
+    nes_mod_set_function_hook_enabled("mm1.coop.private-scroll-left",enabled);nes_mod_set_function_hook_enabled("mm1.coop.private-scroll-right",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.draw-part",enabled);
     for(int i=0;i<sizeof world_hook_ids/sizeof *world_hook_ids;i++)nes_mod_set_function_hook_enabled(world_hook_ids[i],enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.refill",enabled);
@@ -866,10 +934,10 @@ static void frame_end(void *ctx) {
         (unsigned long long)C.revivals[0],(unsigned long long)C.revivals[1],menu);
     }
 }
-static int get(uint8_t *out,int cap){if(cap<(int)sizeof C)return -1;memcpy(C.magic,"MCO7",4);C.on=(uint8_t)enabled;C.roster=(uint8_t)roster;C.independent=(uint8_t)mm1_coop_independent();memcpy(out,&C,sizeof C);return sizeof C;}
+static int get(uint8_t *out,int cap){if(cap<(int)sizeof C)return -1;memcpy(C.magic,"MCO9",4);C.on=(uint8_t)enabled;C.roster=(uint8_t)roster;C.independent=(uint8_t)mm1_coop_independent();memcpy(out,&C,sizeof C);return sizeof C;}
 static int valid(const uint8_t *in,int len) {
     if(!len)return !enabled;if(!in||len!=sizeof C)return 0;Coop n;memcpy(&n,in,sizeof n);
-    if(memcmp(n.magic,"MCO7",4)||n.on!=enabled||n.roster!=roster||n.independent!=mm1_coop_independent()||n.initialized>1||n.current>1||n.anchor>1||n.in_guest||n.drawing||
+    if(memcmp(n.magic,"MCO9",4)||n.on!=enabled||n.roster!=roster||n.independent!=mm1_coop_independent()||n.initialized>1||n.current>1||n.anchor>1||n.in_guest||n.drawing||n.room_follow>3||n.skip_controller>1||
         n.players[0].dead>1||n.players[1].dead>1||n.primary_seen>1||n.insert_slot< -1||n.insert_slot>=64)return 0;
     if(n.wiping>1||n.restarting>1||n.game_over>1||n.pending_wipe>1||n.wipe_owner>1||n.checkpoint>2)return 0;
     if(n.build_owner>1||n.shown_owner>1||n.building_guest_owner>1||n.shown_guest_owner>1||n.intro_picture>1)return 0;
@@ -935,6 +1003,12 @@ NES_MOD_CONSTRUCTOR(register_mm1_coop) {
        !nes_mod_register_function_entry_plugin("mm1.coop.checkpoint",0xC26B,checkpoint_restart)||
        !nes_mod_register_function_entry_plugin("mm1.coop.contact",0xA18B,contact)||
        !nes_mod_register_function_entry_plugin("mm1.coop.magnet-ride",0x9634,magnet_ride)||
-       !nes_mod_register_function_entry_plugin("mm1.coop.private-oam-full",0xD2A6,private_oam_full))abort();
+       !nes_mod_register_function_entry_plugin("mm1.coop.private-oam-full",0xD2A6,private_oam_full)||
+       !nes_mod_register_function_entry_plugin("mm1.coop.room-next",0x92A6,room_begin)||
+       !nes_mod_register_function_entry_plugin("mm1.coop.room-previous",0x925B,room_begin)||
+       !nes_mod_register_function_entry_plugin("mm1.coop.controller-completed",0x918A,controller_completed)||
+       !nes_mod_register_function_entry_plugin("mm1.coop.pit-continuation",0x9251,pit_continuation)||
+       !nes_mod_register_function_entry_plugin("mm1.coop.private-scroll-left",0x9F9E,private_scroll)||
+       !nes_mod_register_function_entry_plugin("mm1.coop.private-scroll-right",0x9F6D,private_scroll))abort();
 #endif
 }

@@ -107,7 +107,7 @@ static void restore_death_body(const Player *p) {
 }
 static const char *world_hook_ids[]={"mm1.coop.step","mm1.coop.next","mm1.coop.return",
     "mm1.coop.weapon-begin","mm1.coop.weapon-end","mm1.coop.boss-killed","mm1.coop.stage-clear",
-    "mm1.coop.contact-local","mm1.coop.weapon-local"};
+    "mm1.coop.contact-local","mm1.coop.weapon-local","mm1.coop.stage-select"};
 void mm1_controls_refresh(void);
 int mm1_controls_gameplay(void);
 int mm1_controls_menu(void);
@@ -823,6 +823,13 @@ void mm1_coop_stage_enter(void) {
     memset(&C.world,0,sizeof C.world);C.building.mask=C.shown.mask=0;C.pair_ready=0;
     C.view_ready=C.view_drawing=C.view_visible=C.room_follow=C.waiting=0;memset(C.view_build,0,sizeof C.view_build);memset(C.view_shown,0,sizeof C.view_shown);
 }
+static int stage_select(uint16_t address) {
+    (void)address;if(!enabled||cyc_mod_isolated())return 0;
+    /* The native finisher owns the entire clear coroutine. Stage selection
+       starts a global scene: retire its personal contexts before the native
+       menu reads input or reuses the player actors for its own graphics. */
+    mm1_coop_stage_enter();mm1_world_views_reset();return 0;
+}
 void mm1_coop_video_latch(void) {
     if(!enabled)return;
     /* A lag NMI before the main native draw must retain both old bodies.
@@ -1077,8 +1084,8 @@ NES_MOD_CONSTRUCTOR(register_mm1_coop) {
        !nes_mod_register_function_entry_plugin("mm1.coop.draw-part",0xD293,draw_part)||
        !nes_mod_register_savestate_hook("mm1.coop",get,put)||
        !nes_mod_register_savestate_validator("mm1.coop",valid))abort();
-    static const uint16_t pcs[]={0x98F2,0x998A,0xC3BE,0xA277,0x91B9,0xCA2D,0xC05A,0xC9BE,0xC9C2};
-    NESModFunctionEntryCallback functions[]={world_step,world_next,native_return,weapon_begin,weapon_end,script_owner,script_owner,collision_local,collision_local};
+    static const uint16_t pcs[]={0x98F2,0x998A,0xC3BE,0xA277,0x91B9,0xCA2D,0xC05A,0xC9BE,0xC9C2,0xD846};
+    NESModFunctionEntryCallback functions[]={world_step,world_next,native_return,weapon_begin,weapon_end,script_owner,script_owner,collision_local,collision_local,stage_select};
     for(int i=0;i<sizeof pcs/sizeof *pcs;i++)if(!nes_mod_register_function_entry_plugin(world_hook_ids[i],pcs[i],functions[i]))abort();
     if(!nes_mod_register_function_entry_plugin("mm1.coop.refill",0x915E,refill_begin))abort();
     if(!nes_mod_register_function_entry_plugin("mm1.coop.pre-shoot",0x91A7,pre_shoot)||

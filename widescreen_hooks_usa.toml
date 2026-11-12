@@ -268,6 +268,11 @@ addr = 0xC05A
 bytes = "A9 00 85 3E A9 FE 20 77"
 
 [[mod_function_hook]]
+id = "mm1.coop.stage-select"
+addr = 0xD846
+bytes = "A9 06 85 42 8D 06 C0 A9"
+
+[[mod_function_hook]]
 id = "mm1.coop.refill"
 addr = 0x915E
 bank = 5

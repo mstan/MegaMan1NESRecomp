@@ -100,6 +100,10 @@ the main player's view; native weapon changes still update the shared blocks.
 Cut's return acceleration and Bomb's bounce damping stay with each player's
 weapon pool. Simultaneous throws match the original solo weapon paths, with
 current-build state and audio continuation checked.
+The second player can defeat Cut Man with the native Buster, collect the real
+reward and complete the native clear script. Stage selection then returns to
+P1 controls and starts the next stage with both characters. Targeted checks
+cover the original menu picture and mid-clear state/audio continuation.
 Full-stage transition coverage and online play are still being implemented;
 the Co-op package is not exposed in the Mods catalog yet.
 

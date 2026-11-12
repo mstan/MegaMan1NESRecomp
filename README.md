@@ -61,6 +61,10 @@ Targeted checks cover both directions, jumping off, native beam expiration,
 Fit to screen and current-build state/audio continuation.
 Both players also use the same native moving-platform buffers and carry speed;
 targeted Foot Holder checks cover both rosters and state/audio replay.
+Ordinary native enemy AI targets the nearest living player, with withdrawn
+players excluded. Damage reactions retain the actual attacker's equipment.
+Dense native AI checks cover palette preservation and an interrupted update's
+current-build state, immediate image and audio continuation.
 Full-stage transition coverage, independent views and online play are still being
 implemented; the Co-op package is not exposed in the Mods catalog yet.
 

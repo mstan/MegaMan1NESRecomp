@@ -119,8 +119,14 @@ static void domain(void) {
     addresses[address_count++]=0x3E1;addresses[address_count++]=0x3E2;
     for(int i=0;i<address_count;i++)indices[addresses[i]]=(uint16_t)(i+1);
 }
-static void capture(Player *p){for(int i=0;i<address_count;i++)p->ram[i]=R(addresses[i]);}
-static void project(const Player *p){for(int i=0;i<address_count;i++)W(addresses[i],p->ram[i]);}
+static int ai_personal_color(const Player *p,int address) {
+    return C.world.ai_active&&p==&C.players[C.anchor^1]&&(address==0x3E1||address==0x3E2);
+}
+/* Native NMI can upload armor while an enemy is using the guest's combat
+   image. Nested draw/frame callbacks must neither capture the anchor's colors
+   into that guest nor replace the physical anchor's pending palette. */
+static void capture(Player *p){for(int i=0;i<address_count;i++)if(!ai_personal_color(p,addresses[i]))p->ram[i]=R(addresses[i]);}
+static void project(const Player *p){for(int i=0;i<address_count;i++)if(!ai_personal_color(p,addresses[i]))W(addresses[i],p->ram[i]);}
 static void personal(Player *p,unsigned address,unsigned value){if(indices[address])p->ram[indices[address]-1]=(uint8_t)value;}
 int mm1_coop_read(int seat,uint16_t address) {
     if(seat<0||seat>1||address>=2048)return 0;
@@ -429,6 +435,16 @@ static int native_target(uint16_t target) {
     target--;W(0x100|stack,target>>8);stack=(stack-1)&255;W(0x100|stack,target);stack=(stack-1)&255;
     r.s=(uint8_t)stack;cyc_mod_set_regs(&r);return 1;
 }
+static int enemy_owner(int slot) {
+    World *w=&C.world;
+    if((w->pending&(1u<<slot))&&(R(0x420+slot)&128))return w->hit_owner[slot];
+    int chosen=-1,best=0x7FFFFFFF,ex=R(0x460+slot)*256+R(0x480+slot),ey=R(0x600+slot);
+    for(int seat=0;seat<2;seat++) {
+        if(mm1_coop_seat_blocked(seat)||!mm1_coop_read(seat,0x6A))continue;
+        int x=mm1_coop_read(seat,0x460)*256+mm1_coop_read(seat,0x480),y=mm1_coop_read(seat,0x600);
+        int distance=abs(ex-x)+abs(ey-y);if(distance<best){best=distance;chosen=seat;}
+    }return chosen;
+}
 static int world_step(uint16_t address) {
     (void)address;if(!enabled||!C.initialized||C.wiping||cyc_mod_isolated())return 0;
     World *w=&C.world;int slot=R(0x2F);CycModRegs r={0};cyc_mod_regs(&r);
@@ -446,10 +462,11 @@ static int world_step(uint16_t address) {
         if(C.players[guest].teleport||C.players[guest].transport_dispatched){w->phase=3;W(0x54,16);return native_target(0x98EA);}
         w->phase=1;return native_target(0xA18B);
     }
-    /* Deferred native enemy damage reads the attacker's equipment and charge
-     * state. Keep that personal view until this exact actor reaches NextObject. */
-    if(slot>=16&&slot<32&&!w->ai_active&&(w->pending&(1u<<slot))&&(R(0x420+slot)&128)) {
-        int owner=w->hit_owner[slot];if(owner!=C.anchor) {
+    /* One native AI update uses the nearest living player's position. Pending
+       damage retains its actual attacker's equipment/charge identity first.
+       Close only when this exact native actor/depth reaches NextObject. */
+    if(slot>=16&&slot<32&&R(0x600+slot)!=248&&!w->ai_active) {
+        int owner=enemy_owner(slot);if(owner>=0&&owner!=C.anchor) {
             capture(&C.players[C.anchor]);w->ai_active=1;w->ai_slot=(uint8_t)slot;w->ai_stack=r.s;
             C.current=(uint8_t)owner;project(&C.players[owner]);
         }
@@ -556,7 +573,7 @@ static int script_owner(uint16_t address) {
         /* BossKilled discards the native caller stack at CAD7. Keep the real
          * finisher as the main native player before that nonreturning script. */
         if(w->phase)W(0x54,w->total);capture(&C.players[C.current]);C.anchor=C.current;
-        w->phase=w->ai_active=w->draw_active=0;C.building.mask=0;
+        w->phase=w->ai_active=w->draw_active=0;project(&C.players[C.anchor]);C.building.mask=0;
     }
     prepare_guest_picture(1);return 0;
 }

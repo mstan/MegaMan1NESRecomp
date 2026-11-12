@@ -295,3 +295,38 @@ id = "mm1.coop.contact"
 addr = 0xA18B
 bank = 5
 bytes = "38 AD 80 04 E5 1A 38 E9"
+
+[[mod_function_hook]]
+id = "mm1.coop-menu.entry"
+addr = 0xC3BF
+bytes = "A9 06 85 42 8D 06 C0 A5"
+
+[[mod_function_hook]]
+id = "mm1.coop-menu.end-phase"
+addr = 0xB14A
+bank = 6
+bytes = "20 1B C0 AD 81 03 18 69"
+
+[[mod_function_hook]]
+id = "mm1.coop-menu.end-sprites"
+addr = 0xB26C
+bank = 6
+bytes = "A5 23 29 07 D0 07 A5 23"
+
+[[mod_function_hook]]
+id = "mm1.coop-menu.end-cursor"
+addr = 0xB250
+bank = 6
+bytes = "A2 1C A9 00 9D 06 02 CA"
+
+[[mod_function_hook]]
+id = "mm1.coop-menu.request"
+addr = 0x916F
+bank = 5
+bytes = "A5 60 D0 0D 20 BF C3 AD"
+
+[[mod_function_hook]]
+id = "mm1.coop-menu.after-pause"
+addr = 0x9180
+bank = 5
+bytes = "A9 00 85 41 8D 00 04 20"

@@ -6,6 +6,7 @@
 #include "mm1_charge.h"
 #include "mm1_slide.h"
 #include "mm1_weapon_gfx.h"
+#include "mm1_coop_menu.h"
 #include "cyc_mod.h"
 #include "cyc_mm4_audio.h"
 #include "cyc_render.h"
@@ -78,6 +79,7 @@ void mm1_controls_refresh(void);
 int mm1_controls_gameplay(void);
 int mm1_controls_menu(void);
 int mm1_weapons_player_dispatch(void);
+void mm1_weapons_equip(int weapon);
 int mm1_coop_available(void){return enabled;}
 int mm1_coop_seat(void){return enabled?C.current:0;}
 int mm1_coop_anchor(void){return enabled?C.anchor:0;}
@@ -86,6 +88,7 @@ int mm1_coop_dma_begin(void){int previous=C.current;if(enabled)C.current=C.shown
 int mm1_coop_primary_publish(void){return !enabled||C.pair_ready;}
 void mm1_coop_present_end(int previous){C.current=(uint8_t)previous;}
 int mm1_coop_character(void){return roster^(C.current&1);}
+int mm1_coop_character_for(int seat){return roster^(seat&1);}
 int mm1_coop_drawing(void){return C.drawing!=0;}
 int mm1_coop_insert_slot(void){return C.insert_slot;}
 void mm1_coop_primary_begin(void){
@@ -121,6 +124,30 @@ static void personal(Player *p,unsigned address,unsigned value){if(indices[addre
 int mm1_coop_read(int seat,uint16_t address) {
     if(seat<0||seat>1||address>=2048)return 0;
     int i=indices[address];return enabled&&C.initialized&&seat!=C.current&&i?C.players[seat].ram[i-1]:R(address);
+}
+int mm1_coop_menu_ready(int seat) {
+    if(!enabled||!C.initialized||C.wiping||seat<0||seat>1||mm1_coop_seat_blocked(seat)||R(0x31)>=10||mm1_coop_total()!=32)return 0;
+    int flag=mm1_coop_read(seat,0x420)&15;
+    return mm1_coop_read(seat,0x6A)&&mm1_coop_read(seat,0x600)<248&&!R(0x1E)&&!R(0x26)&&!R(0x41)&&
+        !mm1_coop_read(seat,0xAD)&&flag!=1&&(mm1_coop_menu_active()||!mm1_coop_read(seat,0x60));
+}
+int mm1_coop_menu_scene(void){return enabled&&C.initialized&&!C.wiping&&R(0x31)<10;}
+int mm1_coop_menu_project(int seat) {
+    if(C.current!=C.anchor||mm1_coop_inflight()||mm1_reflect_busy()||cyc_mod_isolated())return 0;
+    capture(&C.players[C.anchor]);C.current=(uint8_t)seat;project(&C.players[seat]);return 1;
+}
+void mm1_coop_menu_restore(void){capture(&C.players[C.current]);C.current=C.anchor;project(&C.players[C.anchor]);}
+void mm1_coop_menu_begin(void) {
+    capture(&C.players[C.current]);for(int seat=0;seat<2;seat++) {
+        C.current=(uint8_t)seat;project(&C.players[seat]);mm1_slide_restore_input();mm1_charge_cancel();capture(&C.players[seat]);
+    }
+    C.current=C.anchor;project(&C.players[C.anchor]);C.select_hold[0]=C.select_hold[1]=C.select_armed[0]=C.select_armed[1]=0;
+}
+int mm1_coop_menu_equip(int seat,int weapon) {
+    static const uint8_t index[]={0,5,4,1,6,2,3,7};
+    if(!mm1_coop_menu_ready(seat)||weapon<0||weapon>7||(weapon&&!(R(0x5D)&(1u<<index[weapon]))))return 0;
+    capture(&C.players[C.current]);C.current=(uint8_t)seat;project(&C.players[seat]);mm1_weapons_equip(weapon);capture(&C.players[seat]);
+    C.current=C.anchor;project(&C.players[C.anchor]);return 1;
 }
 static uint8_t reverse(uint8_t n){n=(uint8_t)(((n&0x55)<<1)|((n>>1)&0x55));n=(uint8_t)(((n&0x33)<<2)|((n>>2)&0x33));return(uint8_t)((n<<4)|(n>>4));}
 static void initialize(void) {
@@ -495,6 +522,7 @@ static int script_owner(uint16_t address) {
     prepare_guest_picture(1);return 0;
 }
 void mm1_coop_stage_enter(void) {
+    mm1_coop_menu_cancel();
     C.restarting=(uint8_t)(C.wiping&&!C.game_over);C.initialized=0;C.wiping=C.pending_wipe=0;
     if(enabled)for(int seat=0;seat<2;seat++){C.current=(uint8_t)seat;mm1_charge_stage_enter();mm1_slide_stage_enter();}
     C.current=C.anchor=C.build_owner=C.shown_owner=0;C.building_guest_owner=C.shown_guest_owner=1;C.intro_picture=0;
@@ -607,13 +635,15 @@ static void set_enabled(int on) {
     nes_mod_set_function_hook_enabled("mm1.coop.checkpoint",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.contact",enabled);
     nes_mod_set_local_only("Mega Man 1 co-op development",enabled);
+    mm1_coop_menu_refresh();
     C.initialized=0;C.current=C.anchor=0;memset(&C.world,0,sizeof C.world);mm1_controls_refresh();mm1_video_character_changed();
 }
-static void power_on(void *ctx){(void)ctx;memset(&C,0,sizeof C);domain();}
+static void power_on(void *ctx){(void)ctx;memset(&C,0,sizeof C);domain();mm1_coop_menu_reset();}
 static void input(void *ctx,uint8_t buttons[2]) {
     (void)ctx;if(!enabled)return;
     for(int i=0;i<2;i++)C.players[i].held=reverse(nes_input_seat(i+1));
     buttons[0]=(C.wiping?(nes_input_seat(1)|nes_input_seat(2)):nes_input_seat(C.anchor+1))&(uint8_t)~0x20;buttons[1]=0;
+    mm1_coop_menu_input(buttons);
 }
 static void frame_end(void *ctx) {
     (void)ctx;if(enabled&&C.initialized)capture(&C.players[C.current]);
@@ -629,11 +659,12 @@ static void frame_end(void *ctx) {
         (unsigned long long)C.wipes,(unsigned long long)C.handoffs,(unsigned long long)C.retries);
     for(int seat=0;seat<2;seat++) {
         fputs(seat?",[":"[",report);for(int a=0x6B;a<=0x71;a++)fprintf(report,"%s%d",a==0x6B?"":",",mm1_coop_read(seat,(uint16_t)a));fputc(']',report);
-    }fprintf(report,"],\"shown_owner\":%u,\"guest_owner\":%u,\"intro\":%u,\"blast\":[%u,%u],\"withdrawn\":%u,\"teleport\":[%u,%u],\"hold\":[%u,%u],\"withdrawals\":[%llu,%llu],\"rejoins\":[%llu,%llu],\"revivals\":[%llu,%llu]}\n",
+    }char menu[512];mm1_coop_menu_debug(menu,sizeof menu);
+    fprintf(report,"],\"shown_owner\":%u,\"guest_owner\":%u,\"intro\":%u,\"blast\":[%u,%u],\"withdrawn\":%u,\"teleport\":[%u,%u],\"hold\":[%u,%u],\"withdrawals\":[%llu,%llu],\"rejoins\":[%llu,%llu],\"revivals\":[%llu,%llu],%s}\n",
         C.shown_owner,C.shown_guest_owner,C.intro_picture,C.players[0].blast_ticks,C.players[1].blast_ticks,C.withdrawn,
         C.players[0].teleport,C.players[1].teleport,C.select_hold[0],C.select_hold[1],
         (unsigned long long)C.withdrawals[0],(unsigned long long)C.withdrawals[1],(unsigned long long)C.rejoins[0],(unsigned long long)C.rejoins[1],
-        (unsigned long long)C.revivals[0],(unsigned long long)C.revivals[1]);
+        (unsigned long long)C.revivals[0],(unsigned long long)C.revivals[1],menu);
     }
 }
 static int get(uint8_t *out,int cap){if(cap<(int)sizeof C)return -1;memcpy(C.magic,"MCO5",4);C.on=(uint8_t)enabled;C.roster=(uint8_t)roster;memcpy(out,&C,sizeof C);return sizeof C;}

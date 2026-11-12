@@ -16,6 +16,7 @@
 #include "mm1_charge.h"
 #include "mm1_slide.h"
 #include "mm1_coop.h"
+#include "mm1_coop_menu.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -99,7 +100,8 @@ static void draw_tile(uint32_t *out,int width,int x0,int sx,int sy,int tile,int 
 static int render_inner(uint32_t *out,int width,int height,int x0,const uint32_t *native,void *user) {
     (void)user;(void)height;
     static uint32_t character[256*240];
-    int replaced=mm1_proto_native_picture(character);
+    int menu=mm1_coop_menu_active();
+    int replaced=menu?cyc_render_background(character):mm1_proto_native_picture(character);
     if(replaced)native=character;
     if(!enabled || !game_present_valid() || !(cyc_render_line_mask(80)&8)) {
         if(!replaced)return 0;
@@ -139,6 +141,7 @@ static int render_inner(uint32_t *out,int width,int height,int x0,const uint32_t
     }
     /* Signed packets also repaint selected native pixels when byte-X sprites
      * have wrapped or the console's column guards interrupt the wide view. */
+    if(menu)return 1;
     mm1_video_paint_dust(out,width,x0,coverage);
     for(int i=ws.display.count-1;i>=0;i--) {
         WsSprite *s=&ws.display.tile[i];
@@ -157,6 +160,7 @@ static int render_inner(uint32_t *out,int width,int height,int x0,const uint32_t
 }
 static int render(uint32_t *out,int width,int height,int x0,const uint32_t *native,void *user) {
     int previous=mm1_coop_present_begin();int result=render_inner(out,width,height,x0,native,user);
+    if(mm1_coop_menu_active()){if(!result){memset(out,0,width*height*sizeof(*out));for(int y=0;y<240;y++)memcpy(out+y*width+x0,native+y*256,256*sizeof(*out));}mm1_coop_menu_draw(out,width,-1);result=1;}
     mm1_coop_present_end(previous);return result;
 }
 

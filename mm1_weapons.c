@@ -70,6 +70,16 @@ static int owned_sprite(int weapon,int sprite,int slot) {
     default:return 0;
     }
 }
+void mm1_weapons_menu_state(int on){for(int i=0;i<2;i++){states[i].menu=(uint8_t)(on!=0);states[i].pending=0;}}
+void mm1_weapons_equip(int weapon) {
+    if(weapon<0||weapon>7)return;int current=R(0x5F);
+    for(int slot=2;slot<16;slot++)if(owned_sprite(current,R(0x400+slot),slot))W(0x600+slot,248);
+    if(current==7)for(int i=5;i<10;i++){W(0x5A0+i,0);W(0x5B0+i,0);}
+    W(0x60,0);W(0x61,0);W(0x640,0);W(0x52,255);W(0x5F,weapon);
+    mm1_charge_weapon_changed();
+    W(0x3E1,R(0xD485+weapon*2));W(0x3E2,R(0xD486+weapon*2));
+    W(0x38,0xE0);W(0x39,3);W(0x3A,0xE0);W(0x3B,3);W(0x34,0x18);W(0x37,1);
+}
 int mm1_weapons_player_dispatch(void) {
     /* READY and native arrival scripts can have a normal-looking player RAM
      * image. Only reaching the actual gameplay loop admits a control edge. */
@@ -86,14 +96,8 @@ int mm1_weapons_player_dispatch(void) {
     int next=index,step=fresh==CYC_GAME_L?-1:1;
     do{next=(next+step+8)%8;}while(next!=index && next && !(R(0x5D)&mask[next]));
     if(next==index){attempt_reason=6;return 0;}
-    for(int slot=2;slot<16;slot++)if(owned_sprite(current,R(0x400+slot),slot))W(0x600+slot,248);
-    if(current==7)for(int i=5;i<10;i++){W(0x5A0+i,0);W(0x5B0+i,0);}
-    W(0x60,0);W(0x61,0);W(0x640,0);W(0x52,255);
-    W(0x5F,order[next]);
-    mm1_charge_weapon_changed();
     /* The same fixed-bank palette table and deferred PPU upload as Start. */
-    W(0x3E1,R(0xD485+order[next]*2));W(0x3E2,R(0xD486+order[next]*2));
-    W(0x38,0xE0);W(0x39,3);W(0x3A,0xE0);W(0x3B,3);W(0x34,0x18);W(0x37,1);
+    mm1_weapons_equip(order[next]);
     state.changes++;
     return 0;
 }

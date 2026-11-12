@@ -49,8 +49,12 @@ press it again to rejoin beside a safely grounded partner. Rejoining retains
 health, weapon selection and ammo. Reaching a new native checkpoint revives a
 dead partner with full health, and a team retry uses that checkpoint.
 Targeted Cut Man checks cover these paths, low ceilings, simultaneous Select,
-and a survivor dying while the partner is arriving. Personal menus, full-stage
-transition coverage, independent views and online play are still being
+and a survivor dying while the partner is arriving. Start opens the pausing
+player's native inventory in the shared view. Up/Down moves through acquired
+weapons, A equips without closing, and only that player can resume with Start.
+Health and ammo remain personal. Targeted checks compare the complete panel
+with the original menu and replay a paused current-build state, including audio.
+Full-stage transition coverage, independent views and online play are still being
 implemented; the Co-op package is not exposed in the Mods catalog yet.
 
 ## Cycle backend migration branch

@@ -12,6 +12,7 @@
 #include "cyc_render.h"
 #include "cyc_ring.h"
 #include "cyc_video.h"
+#include "cyc_tcp.h"
 #include "logical_input.h"
 #include "mod_function_hooks.h"
 #include "mod_runtime.h"
@@ -85,9 +86,9 @@ int mm1_coop_view_locked(void){return C.wiping||R(0x1E)||R(0x26)||R(0x68)||R(0x3
 int mm1_widescreen_mode(void);
 void mm1_world_views_reset(void);
 void mm1_coop_view_policy(void){
-    if(mm1_coop_independent())cyc_video_request_width(view_mode==1?512:256);
-    else cyc_video_set_mode(mm1_widescreen_mode());
+    cyc_video_override_width(mm1_coop_independent()?(view_mode==1?512:256):0);
 }
+static void state_loaded(void *ctx){(void)ctx;cyc_video_set_mode(mm1_widescreen_mode());mm1_coop_view_policy();mm1_video_character_changed();}
 int mm1_coop_view_rects(int left[2]) {
     if(!mm1_coop_independent()||!C.initialized||C.stage!=R(0x31)||R(0x31)>=10)return 0;
     int camera=R(0x1B)*256+R(0x1A),lo=R(0x27)*256,hi=R(0x28)*256;
@@ -961,10 +962,11 @@ static bool option(void *ctx,const char *name,const char *value) {
     (void)ctx;if(!strcmp(name,"--coop-report")){report=fopen(value,"w");return report!=NULL;}
     if(!strcmp(name,"--coop-view")) {
         if(strcmp(value,"shared")&&strcmp(value,"split")&&strcmp(value,"p1")&&strcmp(value,"p2"))return false;
+        int was_independent=mm1_coop_independent();
         view_mode=!strcmp(value,"split")?1:!strcmp(value,"p1")?2:!strcmp(value,"p2")?3:0;
         nes_mod_set_function_hook_enabled("mm1.coop.private-oam-full",mm1_coop_independent());
-        C.view_ready=C.view_drawing=C.view_visible=0;
-        mm1_world_views_reset();mm1_video_character_changed();mm1_coop_view_policy();return true;
+        if(was_independent!=mm1_coop_independent()){C.view_ready=C.view_drawing=C.view_visible=0;mm1_world_views_reset();}
+        mm1_video_character_changed();mm1_coop_view_policy();return true;
     }
     if(!strcmp(name,"--coop-test-poke")) {
         unsigned frame,seat,address,v;int n=0;domain();
@@ -979,13 +981,20 @@ static bool option(void *ctx,const char *name,const char *value) {
     if(strcmp(name,"--coop"))return false;if(strcmp(value,"on")&&strcmp(value,"off"))return false;
     set_enabled(!strcmp(value,"on"));return enabled==!strcmp(value,"on");
 }
+static void tcp_view(int id,const char *line) {
+    char value[16];if(!cyc_tcp_str(line,"view",value,sizeof value)){cyc_tcp_err(id,"coop_view: view shared|split|p1|p2");return;}
+    if(C.initialized&&((strcmp(value,"shared")!=0)!=mm1_coop_independent())){cyc_tcp_err(id,"The running game keeps its shared/separate simulation profile");return;}
+    if(!option(NULL,"--coop-view",value)){cyc_tcp_err(id,"coop_view: invalid view");return;}
+    char out[64];snprintf(out,sizeof out,"\"view\":%d",view_mode);cyc_tcp_ok(id,out);
+}
+static void tcp_setup(void *ctx){(void)ctx;cyc_tcp_register("coop_view","local co-op layout: view shared|split|p1|p2",tcp_view);}
 const CycHostExtras *mm1_coop_extras(void) {
     static const CycHostOption options[]={{"--coop",true,"on|off: development co-op controller slice"},
         {"--coop-p1",true,"megaman|protoman: complementary character roster"},
         {"--coop-view",true,"shared|split|p1|p2: co-op view"},
         {"--coop-test-poke",true,"FRAME:SEAT:ADDRESS:VALUE: bounded personal RAM precondition"},
         {"--coop-report",true,"FILE: personal controller observations"}};
-    static const CycHostExtras extras={.power_on=power_on,.input=input,.frame_end=frame_end,
+    static const CycHostExtras extras={.power_on=power_on,.input=input,.frame_end=frame_end,.state_loaded=state_loaded,.tcp_setup=tcp_setup,
         .option=option,.options=options,.option_count=5};return &extras;
 }
 NES_MOD_CONSTRUCTOR(register_mm1_coop) {

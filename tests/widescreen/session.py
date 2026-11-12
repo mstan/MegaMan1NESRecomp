@@ -16,12 +16,13 @@ def prepare(exe,rom,route,frame,out):
  return state
 
 class Session:
- def __init__(self,exe,rom,out,mode):
+ def __init__(self,exe,rom,out,mode,args=None):
   self.out=out;self.seq=0;self.sock=None;self.stream=None
   with socket.socket() as s:s.bind(('127.0.0.1',0));port=s.getsockname()[1]
   self.log=(out/(mode.replace(':','-')+'.log')).open('w')
   self.proc=subprocess.Popen([str(exe),str(rom),'--hidden','--no-save','--config',str(out/'config.ini'),
-      '--tcp',str(port),'--widescreen',mode],cwd=exe.parent,env=dict(os.environ,NESRECOMP_NO_LAUNCHER='1'),
+      '--tcp',str(port),*(args if args is not None else ('--widescreen',mode))],cwd=exe.parent,
+      env=dict(os.environ,NESRECOMP_NO_LAUNCHER='1',SDL_AUDIODRIVER='dummy'),
       stdout=self.log,stderr=subprocess.STDOUT,**hidden_options())
   try:
    until=time.monotonic()+15

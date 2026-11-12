@@ -35,6 +35,7 @@ typedef struct {
 } WsPresentation;
 static WsPresentation ws;
 static int enabled, extended=1, aspect=NES_VIDEO_FIT;
+static int capture_enabled;
 static uint64_t spawns, retains, sprite_overflow, failures;
 static int camera_x, map_samples, map_errors;
 static FILE *report;
@@ -198,7 +199,9 @@ void mm1_video_character_changed(void) {
     nes_mod_set_function_hook_enabled("mm1.coop.spawn-candidate",mm1_coop_independent());
     nes_mod_set_function_hook_enabled("mm1.coop.view-hud",mm1_coop_independent());
 #endif
-    cyc_render_capture_background(character!=0);
+    /* Re-enabling capture clears its complete frame, including a restored
+       paused background. Local layout changes only invalidate composition. */
+    if(capture_enabled!=(character!=0)){capture_enabled=character!=0;cyc_render_capture_background(capture_enabled!=0);}
     cyc_render_set_stock_compositing(character!=0);
     cyc_render_set_compositor(enabled||character?render:NULL,NULL);
     nes_mod_set_function_hook_enabled("mm1.proto.pose-done",character);

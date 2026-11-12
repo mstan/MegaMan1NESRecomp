@@ -25,6 +25,10 @@ static void frame_end(void *ctx) {
     (void)ctx;
     for(int i=0;i<PARTS;i++)if(parts[i]->frame_end)parts[i]->frame_end(parts[i]->ctx);
 }
+static void state_loaded(void *ctx) {
+    (void)ctx;
+    for(int i=0;i<PARTS;i++)if(parts[i]->state_loaded)parts[i]->state_loaded(parts[i]->ctx);
+}
 static void input(void *ctx,uint8_t buttons[2]) {
     (void)ctx;
     for(int i=0;i<PARTS;i++)if(parts[i]->input)parts[i]->input(parts[i]->ctx,buttons);
@@ -51,7 +55,7 @@ const CycHostExtras *cyc_host_extras(void) {
         parts[4]=mm1_slide_extras();
         parts[5]=mm1_coop_extras();
         host.power_on=power_on;host.frame_end=frame_end;host.input=input;
-        host.frame_begin=frame_begin;
+        host.frame_begin=frame_begin;host.state_loaded=state_loaded;
         host.audio_mix=audio_mix;host.audio_rate=48000;
         host.option=option;host.tcp_setup=tcp_setup;host.options=options;
         host.input_profile=parts[1]->input_profile;

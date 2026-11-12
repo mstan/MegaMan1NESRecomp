@@ -73,6 +73,9 @@ original enemy pool and retrying when a slot becomes available. Shots can cross
 into the partner's view. Targeted checks compare full native images, both native
 menu panels, local view modes, distant survivor handoffs, native death scripts
 and current-build state/audio continuation.
+Independent layouts keep their fixed grid widths through window resizing while
+retaining the selected aspect for the shared view. Paused P1/P2 view changes
+preserve the loaded background and each player's own native panel.
 Native contact and weapon overlap tests also use the distant player's local
 coordinates. Targeted checks cover both characters' damage, personal refills,
 shared extra lives, charged shots and reflected shots beyond the main camera.

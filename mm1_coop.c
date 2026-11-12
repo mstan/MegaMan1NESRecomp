@@ -104,10 +104,11 @@ void mm1_coop_primary_body(void){if(enabled&&R(0x0C)==0){C.primary_cursor=(uint8
 static void domain(void) {
     if(address_count)return;
     /* Camera, RNG, stage, unlocks, world actors, lives and sound queue stay
-     * common. Lift buffers are the native world frame's existing buffers. */
+     * common. Lift buffers and their 9C/9D speed belong to the native world
+     * frame; 9B/9E retain each rider's personal attachment state. */
     static const uint8_t zp[]={0x14,0x16,0x18,0x2D,0x2E,0x30,0x52,0x55,0x5F,0x60,0x61,
         0x6A,0x6B,0x6C,0x6D,0x6E,0x6F,0x70,0x71,0x94,0x95,0x98,0x99,
-        0x9B,0x9C,0x9D,0x9E,0x9F,0xA0,0xA1,0xA2,0xA3,0xA4,0xA5,0xAD};
+        0x9B,0x9E,0x9F,0xA0,0xA1,0xA2,0xA3,0xA4,0xA5,0xAD};
     for(unsigned i=0;i<sizeof zp;i++)addresses[address_count++]=zp[i];
     for(int field=0;field<16;field++) {
         int base=field<8?0x400+field*32:0x600+(field-8)*32;
@@ -706,10 +707,10 @@ static void frame_end(void *ctx) {
         (unsigned long long)C.revivals[0],(unsigned long long)C.revivals[1],menu);
     }
 }
-static int get(uint8_t *out,int cap){if(cap<(int)sizeof C)return -1;memcpy(C.magic,"MCO5",4);C.on=(uint8_t)enabled;C.roster=(uint8_t)roster;memcpy(out,&C,sizeof C);return sizeof C;}
+static int get(uint8_t *out,int cap){if(cap<(int)sizeof C)return -1;memcpy(C.magic,"MCO6",4);C.on=(uint8_t)enabled;C.roster=(uint8_t)roster;memcpy(out,&C,sizeof C);return sizeof C;}
 static int valid(const uint8_t *in,int len) {
     if(!len)return !enabled;if(!in||len!=sizeof C)return 0;Coop n;memcpy(&n,in,sizeof n);
-    if(memcmp(n.magic,"MCO5",4)||n.on!=enabled||n.roster!=roster||n.initialized>1||n.current>1||n.anchor>1||n.in_guest||n.drawing||
+    if(memcmp(n.magic,"MCO6",4)||n.on!=enabled||n.roster!=roster||n.initialized>1||n.current>1||n.anchor>1||n.in_guest||n.drawing||
         n.players[0].dead>1||n.players[1].dead>1||n.primary_seen>1||n.insert_slot< -1||n.insert_slot>=64)return 0;
     if(n.wiping>1||n.restarting>1||n.game_over>1||n.pending_wipe>1||n.wipe_owner>1||n.checkpoint>2)return 0;
     if(n.build_owner>1||n.shown_owner>1||n.building_guest_owner>1||n.shown_guest_owner>1||n.intro_picture>1)return 0;

@@ -1,11 +1,12 @@
 """Real NMI continuations in native guest collision/projectile scopes."""
-import argparse,json,os,pathlib,subprocess,sys,wave
+import argparse,json,os,pathlib,shutil,subprocess,sys,wave
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent.parent/'protoman'))
 from validate import pixels
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     for name in ('rom','exe','out'):p.add_argument('--'+name,type=pathlib.Path,required=True)
+    p.add_argument('--slowdown-gate',action='store_true',help='Compare the existing dense native workload with fresh catalog CPU timing')
     a=p.parse_args();a.exe=a.exe.resolve();a.out.mkdir(parents=True,exist_ok=True)
     lines=['0 -','0 2:-','180 START','181 -','360 START','361 -','1490 POKE 005D FE',
         '1490 POKE 005F 05','1490 POKE 006F 1C','1490 POKE 0055 81']
@@ -24,16 +25,57 @@ def main():
     for address,value in pose.items():pokes+=['--coop-test-poke',f'1490:2:{address:X}:{value:X}']
     base=[str(a.exe),str(a.rom.resolve()),'--frames','1600','--coop','on','--weapon-cycle','on','--charge','off',
         '--widescreen','fit','--widescreen-enemies','classic','--present-size','1280x720','--input',str(route),
-        *pokes,'--no-save','--config',str(a.out/'test.ini')]
+        *pokes,'--slowdown','off','--no-save','--config',str(a.out/'test.ini')]
     env=dict(os.environ,SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy',NESRECOMP_NO_LAUNCHER='1')
     def run(name,extra=()):
         with (a.out/(name+'.log')).open('w') as log:
             subprocess.run(base+['--coop-report',str(a.out/(name+'.jsonl')),'--hash-out',str(a.out/(name+'.hash')),
+                '--slowdown-report',str(a.out/(name+'-timing.jsonl')),
                 '--present-out',str(a.out/(name+'.png')),'--wav-out',str(a.out/(name+'.wav')),*extra],
                 cwd=a.exe.parent,env=env,check=True,stdout=log,stderr=subprocess.STDOUT,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
     states=[a.out/'collision.cycstate',a.out/'pool.cycstate']
     run('native',['--save-state',f'1530:{states[0]}','--save-state',f'1542:{states[1]}','--present-every','1530'])
+    if a.slowdown_gate:
+        index=base.index('--slowdown');base[index+1]='on'
+        catalog=a.out/'fresh-mods';package='packages/mega-man-usa.enhancement.slowdown/1.0.0/manifest.toml'
+        manifest=catalog/package;manifest.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copyfile(a.exe.parent/'mods'/package,manifest)
+        # Headless runs activate no catalog without --mods-root. Use a fresh
+        # disposable catalog containing the actual staged package to prove its
+        # default separately from the explicit timing A/B in the dense scene.
+        catalog_base=[v for i,v in enumerate(base) if i not in (index,index+1)]
+        with (a.out/'catalog.log').open('w') as log:subprocess.run(catalog_base+['--mods-root',str(catalog),
+            '--frames','2','--slowdown-report',str(a.out/'catalog-timing.jsonl')],cwd=a.exe.parent,env=env,
+            check=True,stdout=log,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW)
+        assert all(r['selected']==r['lines']==262 for r in map(json.loads,(a.out/'catalog-timing.jsonl').read_text().splitlines()))
+        boosted=a.out/'boosted.cycstate'
+        run('default',['--save-state',f'1530:{boosted}','--present-every','1530'])
+        timings={name:[r for r in map(json.loads,(a.out/(name+'-timing.jsonl')).read_text().splitlines())
+            if 1500<r['frame']<=1600] for name in ('native','default')}
+        lag={name:sum(r['wait']!=0 for r in rows) for name,rows in timings.items()}
+        assert len(timings['native'])==len(timings['default'])==100 and lag['default']<lag['native'],lag
+        assert all(r['lines']==r['selected']==262 for r in timings['default']),timings['default'][-1]
+        default_rows=list(map(json.loads,(a.out/'default.jsonl').read_text().splitlines()))
+        assert default_rows[-1]['failures']==0 and default_rows[-1]['hp'][0]>0 and default_rows[-1]['hp'][1]>0,default_rows[-1]
+        run('instant',['--load-state',str(boosted),'--frames','1531'])
+        assert (a.out/'instant.png').read_bytes()==(a.out/'default_01530.png').read_bytes()
+        run('resume',['--load-state',str(boosted)])
+        tail=[s for s in (a.out/'default.hash').read_text().splitlines() if s[:1].isdigit() and int(s.split()[0])>1530]
+        assert tail==(a.out/'resume.hash').read_text().splitlines()
+        assert (a.out/'default.png').read_bytes()==(a.out/'resume.png').read_bytes()
+        def pcm(name):
+            with wave.open(str(a.out/(name+'.wav')),'rb') as f:return f.readframes(f.getnframes())
+        continued=pcm('resume');assert continued and pcm('default')[-len(continued):]==continued
+        run('interpreter',['--interp-only'])
+        assert (a.out/'default.hash').read_bytes()==(a.out/'interpreter.hash').read_bytes()
+        assert (a.out/'default.png').read_bytes()==(a.out/'interpreter.png').read_bytes()
+        assert pcm('default')==pcm('interpreter')
+        assert abs(len(pcm('native'))-len(pcm('default')))<=4,'CPU budget changed the audio sample rate'
+        summary=dict(result='pass',authored_native_density_precondition=True,stock_lag_frames=lag['native'],
+            enhanced_lag_frames=lag['default'],observed_frames=100,default_catalog_lines=262,
+            native_interpreter_exact=True,current_state_hash_pixels_pcm_exact=True,audio_sample_rate_preserved=True)
+        (a.out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary));return
     rows={r['frame']:r for r in map(json.loads,(a.out/'native.jsonl').read_text().splitlines())}
     assert rows[1531]['phase']==2 and rows[1543]['phase']==3,(rows[1531],rows[1543])
     assert rows[1531]['owner']==rows[1543]['owner']==1 and rows[1600]['failures']==0

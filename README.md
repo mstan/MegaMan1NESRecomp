@@ -104,6 +104,11 @@ The second player can defeat Cut Man with the native Buster, collect the real
 reward and complete the native clear script. Stage selection then returns to
 P1 controls and starts the next stage with both characters. Targeted checks
 cover the original menu picture and mid-clear state/audio continuation.
+The optional Reduce slowdown feature gives busy scenes extra CPU time, with
+the sound chip paused during that extra work. It defaults to on in a fresh
+Mods catalog; `--slowdown off` retains the original timing. A dense native
+co-op fixture reduces skipped updates from 43 to zero over 100 frames, with
+the audio sample rate and current-build state/audio continuation checked.
 Full-stage transition coverage and online play are still being implemented;
 the Co-op package is not exposed in the Mods catalog yet.
 

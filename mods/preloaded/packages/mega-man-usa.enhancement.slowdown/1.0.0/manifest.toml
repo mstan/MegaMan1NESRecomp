@@ -1,0 +1,24 @@
+format_version = 1
+id = "mega-man-usa.enhancement.slowdown"
+version = "1.0.0"
+name = "Mega Man Slowdown Reduction"
+author = "NESRecomp"
+description = "Give busy scenes extra CPU time while preserving the display rate and sound pitch."
+license = "PolyForm-Noncommercial-1.0.0"
+resolver = "declarative"
+save_compatibility = "stock"
+
+[[target]]
+game_id = "mega-man-usa"
+rom_crc32 = "6ee4bb0a"
+
+[[feature]]
+id = "slowdown"
+name = "Reduce slowdown"
+description = "Reduce native slowdown in busy scenes. Turn off for original NES timing."
+group = "Gameplay"
+default_enabled = true
+
+[[plugin]]
+feature = "slowdown"
+id = "mm1.slowdown"

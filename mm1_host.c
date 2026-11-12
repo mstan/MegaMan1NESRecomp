@@ -7,10 +7,11 @@ const CycHostExtras *mm1_proto_extras(void);
 const CycHostExtras *mm1_charge_extras(void);
 const CycHostExtras *mm1_slide_extras(void);
 const CycHostExtras *mm1_coop_extras(void);
-enum {PARTS=6};
+const CycHostExtras *mm1_slowdown_extras(void);
+enum {PARTS=7};
 static const CycHostExtras *parts[PARTS];
 static CycHostExtras host;
-static CycHostOption options[20];
+static CycHostOption options[32];
 static int initialized;
 
 static void power_on(void *ctx) {
@@ -54,6 +55,7 @@ const CycHostExtras *cyc_host_extras(void) {
         parts[3]=mm1_charge_extras();
         parts[4]=mm1_slide_extras();
         parts[5]=mm1_coop_extras();
+        parts[6]=mm1_slowdown_extras();
         host.power_on=power_on;host.frame_end=frame_end;host.input=input;
         host.frame_begin=frame_begin;host.state_loaded=state_loaded;
         host.audio_mix=audio_mix;host.audio_rate=48000;

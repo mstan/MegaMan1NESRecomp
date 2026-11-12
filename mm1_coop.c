@@ -470,6 +470,30 @@ static int world_next(uint16_t address) {
         }
     }return 0;
 }
+static int magnet_ride(uint16_t address) {
+    (void)address;if(!enabled||!C.initialized||C.wiping||C.world.phase||C.world.ai_active||
+        mm1_coop_seat_blocked(C.current)||(cyc_mod_isolated()&&!C.in_guest))return 0;
+    /* Retail 9634 tests only the rider's own beam when firing C7. Apply its
+       exact 9691 landing contract to both personal pools, keeping native lifts
+       on their original path when no beam is crossed. */
+    int before=(R(0x600)+14)&255,after=(before-R(0x680)-(R(0x620)<R(0x660)))&255;
+    int x=R(0x460)*256+R(0x480);
+    for(int pass=0;pass<2;pass++) {
+        int owner=C.current^pass;if(mm1_coop_seat_blocked(owner))continue;
+        for(int slot=0;slot<16;slot++) {
+            if(!mm1_coop_read(owner,(uint16_t)(0x5B0+slot)))continue;
+            int screen=mm1_coop_read(owner,(uint16_t)(0x5D0+slot)),bx=mm1_coop_read(owner,(uint16_t)(0x5C0+slot));
+            int y=mm1_coop_read(owner,(uint16_t)(0x5F0+slot));
+            int width=((mm1_coop_read(owner,(uint16_t)(0x5A0+slot))&124)*2+16)&255;
+            int distance=abs(x-screen*256-bx);
+            if(before>=y||after<y||distance>width)continue;
+            W(0x04,distance);W(0x06,bx);W(0x07,screen);W(0x08,y);W(0x09,width);
+            CycModRegs r={0};cyc_mod_regs(&r);r.a=(uint8_t)(y-16);r.x=(uint8_t)slot;
+            r.p=(uint8_t)((r.p&~0xC3)|1|(r.a&128)|(r.a?0:2)|(((y^16)&(y^r.a)&128)?64:0));
+            cyc_mod_set_regs(&r);return 1;
+        }
+    }return 0;
+}
 int mm1_coop_native_pool(void){return enabled&&C.world.phase==3;}
 int mm1_coop_total(void){return enabled&&C.world.phase?C.world.total:R(0x54);}
 int mm1_coop_inflight(void){return enabled&&C.initialized&&(C.world.phase||C.world.ai_active||C.world.draw_active||C.world.refill_active);}
@@ -648,6 +672,7 @@ static void set_enabled(int on) {
     nes_mod_set_function_hook_enabled("mm1.coop.game-over",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.checkpoint",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.contact",enabled);
+    nes_mod_set_function_hook_enabled("mm1.coop.magnet-ride",enabled);
     nes_mod_set_local_only("Mega Man 1 co-op development",enabled);
     mm1_coop_menu_refresh();
     C.initialized=0;C.current=C.anchor=0;memset(&C.world,0,sizeof C.world);mm1_controls_refresh();mm1_video_character_changed();
@@ -740,6 +765,7 @@ NES_MOD_CONSTRUCTOR(register_mm1_coop) {
     if(!nes_mod_register_function_entry_plugin("mm1.coop.pre-shoot",0x91A7,pre_shoot)||
        !nes_mod_register_function_entry_plugin("mm1.coop.game-over",0x9038,game_over)||
        !nes_mod_register_function_entry_plugin("mm1.coop.checkpoint",0xC26B,checkpoint_restart)||
-       !nes_mod_register_function_entry_plugin("mm1.coop.contact",0xA18B,contact))abort();
+       !nes_mod_register_function_entry_plugin("mm1.coop.contact",0xA18B,contact)||
+       !nes_mod_register_function_entry_plugin("mm1.coop.magnet-ride",0x9634,magnet_ride))abort();
 #endif
 }

@@ -56,6 +56,9 @@ Health and ammo remain personal. Targeted checks compare the complete panel
 with the original menu and replay a paused current-build state, including audio.
 Guest Elec Beams and Guts pickup also change the shared stage's native blocks;
 targeted checks compare the resulting tiles and native weapon artwork.
+Either player can ride a partner's Magnet Beam with another weapon selected.
+Targeted checks cover both directions, jumping off, native beam expiration,
+Fit to screen and current-build state/audio continuation.
 Full-stage transition coverage, independent views and online play are still being
 implemented; the Co-op package is not exposed in the Mods catalog yet.
 

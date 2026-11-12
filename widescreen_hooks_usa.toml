@@ -330,3 +330,9 @@ id = "mm1.coop-menu.after-pause"
 addr = 0x9180
 bank = 5
 bytes = "A9 00 85 41 8D 00 04 20"
+
+[[mod_function_hook]]
+id = "mm1.coop.magnet-ride"
+addr = 0x9634
+bank = 5
+bytes = "A5 60 C9 C7 D0 2A A2 00"

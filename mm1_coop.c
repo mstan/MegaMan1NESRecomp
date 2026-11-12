@@ -139,7 +139,9 @@ static void domain(void) {
     /* Camera, RNG, stage, unlocks, world actors, lives and sound queue stay
      * common. Lift buffers and their 9C/9D speed belong to the native world
      * frame; 9B/9E retain each rider's personal attachment state. */
-    static const uint8_t zp[]={0x14,0x16,0x18,0x2D,0x2E,0x30,0x52,0x55,0x5F,0x60,0x61,
+    /* Bomb bounce damping and Cut's return acceleration live outside their
+       native actors. Keep those original weapon variables with each pool. */
+    static const uint8_t zp[]={0x14,0x16,0x18,0x2D,0x2E,0x30,0x52,0x55,0x5F,0x60,0x61,0x62,0x63,0x64,0x65,0x66,
         0x6A,0x6B,0x6C,0x6D,0x6E,0x6F,0x70,0x71,0x94,0x95,0x98,0x99,
         0x9B,0x9E,0x9F,0xA0,0xA1,0xA2,0xA3,0xA4,0xA5,0xAD};
     for(unsigned i=0;i<sizeof zp;i++)addresses[address_count++]=zp[i];
@@ -981,6 +983,13 @@ static void frame_end(void *ctx) {
         (unsigned long long)C.wipes,(unsigned long long)C.handoffs,(unsigned long long)C.retries);
     for(int seat=0;seat<2;seat++) {
         fputs(seat?",[":"[",report);for(int a=0x6B;a<=0x71;a++)fprintf(report,"%s%d",a==0x6B?"":",",mm1_coop_read(seat,(uint16_t)a));fputc(']',report);
+    }fputs("],\"special\":[",report);
+    for(int seat=0;seat<2;seat++) {
+        fprintf(report,"%s{\"age\":%u,\"scratch\":[",seat?",":"",mm1_coop_read(seat,0x61));
+        for(int a=0x62;a<=0x66;a++)fprintf(report,"%s%u",a==0x62?"":",",mm1_coop_read(seat,(uint16_t)a));
+        fputs("],\"actor\":[",report);
+        for(int field=0;field<16;field++)fprintf(report,"%s%u",field?",":"",mm1_coop_read(seat,(uint16_t)actor_field(field,5)));
+        fputs("]}",report);
     }char menu[512];mm1_coop_menu_debug(menu,sizeof menu);
     fprintf(report,"],\"shown_owner\":%u,\"guest_owner\":%u,\"intro\":%u,\"blast\":[%u,%u],\"withdrawn\":%u,\"teleport\":[%u,%u],\"hold\":[%u,%u],\"withdrawals\":[%llu,%llu],\"rejoins\":[%llu,%llu],\"revivals\":[%llu,%llu],\"wait_both\":%d,\"waiting\":%u,%s}\n",
         C.shown_owner,C.shown_guest_owner,C.intro_picture,C.players[0].blast_ticks,C.players[1].blast_ticks,C.withdrawn,
@@ -989,10 +998,10 @@ static void frame_end(void *ctx) {
         (unsigned long long)C.revivals[0],(unsigned long long)C.revivals[1],wait_both,C.waiting,menu);
     }
 }
-static int get(uint8_t *out,int cap){if(cap<(int)sizeof C)return -1;memcpy(C.magic,"MCOA",4);C.on=(uint8_t)enabled;C.roster=(uint8_t)roster;C.independent=(uint8_t)mm1_coop_independent();C.wait_mode=(uint8_t)wait_both;memcpy(out,&C,sizeof C);return sizeof C;}
+static int get(uint8_t *out,int cap){if(cap<(int)sizeof C)return -1;memcpy(C.magic,"MCOB",4);C.on=(uint8_t)enabled;C.roster=(uint8_t)roster;C.independent=(uint8_t)mm1_coop_independent();C.wait_mode=(uint8_t)wait_both;memcpy(out,&C,sizeof C);return sizeof C;}
 static int valid(const uint8_t *in,int len) {
     if(!len)return !enabled;if(!in||len!=sizeof C)return 0;Coop n;memcpy(&n,in,sizeof n);
-    if(memcmp(n.magic,"MCOA",4)||n.on!=enabled||n.roster!=roster||n.independent!=mm1_coop_independent()||n.wait_mode!=wait_both||n.waiting>2||n.initialized>1||n.current>1||n.anchor>1||n.in_guest||n.drawing||n.room_follow>3||n.skip_controller>1||
+    if(memcmp(n.magic,"MCOB",4)||n.on!=enabled||n.roster!=roster||n.independent!=mm1_coop_independent()||n.wait_mode!=wait_both||n.waiting>2||n.initialized>1||n.current>1||n.anchor>1||n.in_guest||n.drawing||n.room_follow>3||n.skip_controller>1||
         n.players[0].dead>1||n.players[1].dead>1||n.primary_seen>1||n.insert_slot< -1||n.insert_slot>=64)return 0;
     if(n.wiping>1||n.restarting>1||n.game_over>1||n.pending_wipe>1||n.wipe_owner>1||n.checkpoint>2)return 0;
     if(n.build_owner>1||n.shown_owner>1||n.building_guest_owner>1||n.shown_guest_owner>1||n.intro_picture>1)return 0;

@@ -94,6 +94,9 @@ Targeted Cut Man checks cover both player orders, pending-state audio replay,
 vertical return links and the original horizontal scripts.
 Guest movement keeps native collision without streaming another background into
 the main player's view; native weapon changes still update the shared blocks.
+Cut's return acceleration and Bomb's bounce damping stay with each player's
+weapon pool. Simultaneous throws match the original solo weapon paths, with
+current-build state and audio continuation checked.
 Full-stage transition coverage and online play are still being implemented;
 the Co-op package is not exposed in the Mods catalog yet.
 

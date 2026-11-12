@@ -18,7 +18,7 @@ def run(name,exe,flicker='on',extra=()):
  if rows:assert not rows[-1]['failures'],rows[-1]
 def pcm(name):
  with wave.open(str(a.out/(name+'.wav')),'rb') as w:return w.readframes(w.getnframes())
-total=0;before_wrong=0;state=a.out/'wily.cycstate'
+total=0;before_wrong=0;old_margin=0;state=a.out/'wily.cycstate'
 for flicker in ('on','off'):
  before='before-'+flicker;after='after-'+flicker;run(before,a.baseline,flicker)
  run(after,a.exe,flicker,('--save-state',f'1499:{state}','--present-every','1499') if flicker=='on' else ())
@@ -27,6 +27,13 @@ for flicker in ('on','off'):
  data=(a.out/(after+'.frames')).read_bytes();h=struct.unpack_from('<9I',data,12);ram=data[336:2384];oam=data[80:336];at=336+sum(h[3:6]);chr=data[at:at+h[6]]
  assert ram[0x31]==9 and ram[0xB4] and ram[0x3E]>=5
  _,_,native=pixels(a.out/(after+'-native.png'));_,_,shown=pixels(a.out/(after+'.png'));_,_,old=pixels(a.out/(before+'.png'))
+ # This authored arena is exactly one native page. Its moving backdrop
+ # cannot expose immutable terrain outside that page in either margin.
+ assert ram[0x27]==ram[0x28]==35
+ backdrop=native[0][:3]
+ margin=[(x,y) for y in range(232,240) for x in (*range(85),*range(341,426))]
+ assert all(shown[y][x*3:x*3+3]==backdrop for x,y in margin),'Static terrain leaks through the moving-background margins'
+ old_margin+=sum(old[y][x*3:x*3+3]!=backdrop for x,y in margin)
  x0=(ram[0x480]-ram[0x1A])&255;y0=ram[0x600];oracle={}
  for i in range(64):
   y,tile,attr,x=oam[i*4:i*4+4]
@@ -40,10 +47,10 @@ for flicker in ('on','off'):
  wrong=sum(shown[y][(x+85)*3:(x+85)*3+3]!=color for (x,y),color in oracle.items())
  assert wrong==0,('Native body placement',flicker,wrong)
  before_wrong+=sum(old[y][(x+85)*3:(x+85)*3+3]!=color for (x,y),color in oracle.items());total+=len(oracle)
-assert before_wrong>100,before_wrong
+assert before_wrong>100 and old_margin>0,(before_wrong,old_margin)
 run('interpreter',a.exe,'on',('--interp-only',));assert (a.out/'interpreter.hash').read_bytes()==(a.out/'after-on.hash').read_bytes();assert (a.out/'interpreter.png').read_bytes()==(a.out/'after-on.png').read_bytes()
 run('instant',a.exe,'on',('--load-state',str(state),'--frames','1500'));assert (a.out/'instant.png').read_bytes()==(a.out/'after-on_01499.png').read_bytes()
 run('resume',a.exe,'on',('--load-state',str(state)))
 tail=[s for s in (a.out/'after-on.hash').read_text().splitlines() if s[:1].isdigit() and int(s.split()[0])>1499];assert tail==(a.out/'resume.hash').read_text().splitlines();assert (a.out/'resume.png').read_bytes()==(a.out/'after-on.png').read_bytes();assert pcm('after-on')[-len(pcm('resume')):]==pcm('resume')
-summary=dict(result='pass',native_opaque_body_pixels_exact=total,before_wrong_pixels=before_wrong,no_flicker_on_off=True,native_hardware_audio_unchanged=True,native_interpreter=True,current_state_png_pcm_exact=True)
+summary=dict(result='pass',native_opaque_body_pixels_exact=total,before_wrong_pixels=before_wrong,previous_wrong_margin_pixels=old_margin,native_arena_limits_preserved=True,no_flicker_on_off=True,native_hardware_audio_unchanged=True,native_interpreter=True,current_state_png_pcm_exact=True)
 (a.out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary))

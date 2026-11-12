@@ -141,7 +141,7 @@ static int render_inner(uint32_t *out,int width,int height,int x0,const uint32_t
             }
             out[y*width+x]=cyc_render_color(0);
             if(y>=WS_PLAYFIELD_HEIGHT) {out[y*width+x]=native[y*256];continue;}
-            int wx=camera_x+x-x0;
+            int wx=(in_native?camera_x:game_sprite_camera())+x-x0;
             if((wx>>3)!=last_wx || (wy>>3)!=last_wy) {
                 last_wx=wx>>3;last_wy=wy>>3;
                 valid=in_native?game_native_bg(nx,y,&tile,&pal):game_bg(wx,wy,&tile,&pal);

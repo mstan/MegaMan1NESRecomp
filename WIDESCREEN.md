@@ -4,10 +4,13 @@ The USA build enables Fit to screen for a fresh profile. Fit adapts the
 horizontal view to the window; 16:9, 21:9, 32:9 and the original aspect are also
 available. Existing saved choices take precedence over package defaults.
 
-The conversion remains experimental. Targeted USA checks cover Cut Man terrain,
-ordinary enemy activation, native sprite placement and current-build replay.
-Other stages, special generators and complete scripted progression still need
-qualification.
+The conversion remains experimental. Targeted USA checks cover native terrain,
+ordinary enemy activation, sprite placement, room movement and current-build
+replay. High-level checks reach the main area, checkpoint area and real native
+boss clear in all ten stages, including the ending. Earlier traversal is
+bypassed; ordinary full-stage and special-generator coverage remains unverified.
+Wily's independent moving background retains native sprite coordinates and
+the authored room limits in the wider margins.
 
 ## Supported ROMs
 

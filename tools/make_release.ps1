@@ -1,4 +1,5 @@
-param([string]$Rom, [string]$BuildDir='build_release', [string]$EngineRoot, [string]$RecompUi, [switch]$SkipBuild)
+param([string]$Rom, [string]$BuildDir='build_release', [string]$EngineRoot, [string]$RecompUi,
+      [string[]]$CMakeArgs=@(), [switch]$SkipBuild)
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 if (-not $EngineRoot) { $EngineRoot=Join-Path $root 'nesrecomp' }
@@ -6,4 +7,25 @@ if (-not $Rom) {
     $candidate=Join-Path $root 'Mega Man (USA).nes'
     if (Test-Path -LiteralPath $candidate -PathType Leaf) { $Rom=$candidate }
 }
-& (Join-Path $EngineRoot 'tools/package_cycle_windows.ps1') -ProjectRoot $root -Target 'MegaManRecomp' -Title 'Mega Man' -BuildDir $BuildDir -Rom $Rom -EngineRoot $EngineRoot -RecompUi $RecompUi -SkipBuild:$SkipBuild -GameNotes ''
+$notes=@'
+Fit to screen, L/R weapon switching, Reduce slowdown and No sprite flicker
+start enabled for a fresh profile. Existing saved choices take precedence.
+
+Enable Proto Man in Mods to swap characters with Select. Its normal setting
+includes the airborne front shield, two Buster shots and double damage taken.
+The optional normal-stat reskin keeps Mega Man's behavior.
+
+Enable Co-op in Mods and assign each player's controls in Controls. Start
+opens your native inventory; only the pausing player can resume. Hold Select
+to withdraw while your partner remains, then release and press it to rejoin
+beside a safely grounded partner. Health, weapons and ammo remain personal.
+Shared, split and single-player views are available in Mods.
+
+Charge shots and sliding are optional Mods shared by both characters. They
+require your original Mega Man 4 (USA) ROM. Hold B with the Buster to charge;
+press Down + A to slide. No donor ROM or extracted donor data is included.
+
+Save states belong to this build. Preserve your existing saves and settings
+when replacing an older installation.
+'@
+& (Join-Path $EngineRoot 'tools/package_cycle_windows.ps1') -ProjectRoot $root -Target 'MegaManRecomp' -Title 'Mega Man' -BuildDir $BuildDir -Rom $Rom -EngineRoot $EngineRoot -RecompUi $RecompUi -CMakeArgs $CMakeArgs -SkipBuild:$SkipBuild -GameNotes $notes

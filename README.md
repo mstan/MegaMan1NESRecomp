@@ -8,9 +8,10 @@ Quick switching restores the original weapon's pattern graphics. Co-op players
 retain their own weapon patterns while the main player's graphics are displayed.
 
 The [widescreen implementation](WIDESCREEN.md) remains experimental. USA checks
-cover Cut Man terrain, wider enemy activation, native/interpreter agreement and
-current-build state replay. Other stages and scripted transitions still need
-qualification. The Europe prototype retains its separate hooks and
+cover native terrain and sprites, wider enemy activation, native room movement,
+native/interpreter agreement and current-build state replay. High-level checks
+reach all ten stages and their native clears; ordinary full-stage traversal
+remains unverified. The Europe prototype retains its separate hooks and
 opt-in default.
 
 The optional USA Proto Man package adds Select teleport swapping, an airborne
@@ -31,7 +32,7 @@ Half shots use normal Buster damage; full shots triple it and continue through
 lethal enemy hits.
 The donor image and its artwork are never written into the package. Charging,
 active-shot state/audio replay, slide movement/ceilings/contact and native
-damage paths have targeted checks. Multiplayer parity remains under development.
+damage paths have targeted checks. Final online qualification remains open.
 
 The development `--coop on` slice separates personal movement, equipment state
 and native actors while the original frame loop advances the world once.
@@ -142,8 +143,9 @@ the match. Independent-view rollback and final release qualification remain open
 High-level checks reach the main area, authored checkpoint area and boss in all
 ten stages. Real attacks complete each native clear, including both final Wily
 phases and the ending. Earlier traversal is bypassed; these are targeted checks.
-Wily's moving background preserves native player and projectile positions, with
-native-pixel, backend and current-build state/audio comparisons.
+Wily's moving background preserves native player and projectile positions and
+the authored arena limits in the wider margins, with native-pixel, backend and
+current-build state/audio comparisons.
 
 ## Cycle backend migration branch
 
@@ -175,13 +177,15 @@ runs the cycle interpreter for diagnosis. Earlier `--verify` / `--emulated`
 Nestopia entry points remain in the legacy build.
 
 Desktop Windows checks cover short gameplay routes and runtime
-menu/input/save-state behavior. Other platforms and full-game completion
-remain outside this validation.
+menu/input/save-state behavior. Other platforms and ordinary end-to-end
+traversal remain outside this validation.
 
 Cycle Windows builds use `tools/build.ps1 -Rom <original-ROM>`. Create a ROM-free
 ZIP with `tools/make_release.ps1 -Rom <original-ROM>`; `-SkipBuild -BuildDir
 build-cycle` packages an existing production cycle build. Legacy C remains
 available through explicit CMake selection.
+Both PowerShell wrappers accept `-CMakeArgs` for explicit compiler, netplay and
+rollback source paths, using the same arguments as the shared engine helpers.
 
 ## License
 

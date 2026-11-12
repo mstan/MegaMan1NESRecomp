@@ -109,9 +109,10 @@ static int render_inner(uint32_t *out,int width,int height,int x0,const uint32_t
     static uint32_t character[256*240];
     int menu=mm1_coop_menu_active();
     int full=mm1_sprites_ready()&&game_present_valid()&&!menu;
+    int shared_source=-1,shared_left=game_shared_camera(width,&shared_source),shared=shared_source>=0;
     int replaced=menu||full?cyc_render_background(character):mm1_proto_native_picture(character);
     if(replaced)native=character;
-    if(!enabled || !game_present_valid() || !(cyc_render_line_mask(80)&8)) {
+    if((!enabled&&!shared) || !game_present_valid() || !(cyc_render_line_mask(80)&8)) {
         if(!replaced)return 0;
         for(int y=0;y<240;y++)memcpy(out+y*width+x0,native+y*256,256*sizeof *out);
         if(full) {
@@ -121,7 +122,9 @@ static int render_inner(uint32_t *out,int width,int height,int x0,const uint32_t
         }
         return 1;
     }
-    camera_x=unwrap(cyc_render_line_scroll_x(80),game_camera(),WS_SCROLL_PERIOD);
+    int source=shared?shared_source:unwrap(cyc_render_line_scroll_x(80),game_camera(),WS_SCROLL_PERIOD);
+    camera_x=shared?shared_left+x0:source;
+    int native_origin=x0+source-camera_x;
     game_prepare_render(width,x0);
     memset(coverage,0,(size_t)width*240);
     for(int y=0;y<240;y++) {
@@ -130,10 +133,10 @@ static int render_inner(uint32_t *out,int width,int height,int x0,const uint32_t
         int last_wx=-9999,last_wy=-9999,tile=0,pal=0,valid=0;
         uint8_t lo=0,hi=0;
         for(int x=0;x<width;x++) {
-            int nx=x-x0,in_native=nx>=0 && nx<256;
+            int nx=x-native_origin,in_native=nx>=0 && nx<256;
             if(in_native && !game_repair_pixel(nx,y)) {
-                out[y*width+x]=native[y*256+x-x0];
-                coverage[y*width+x]=cyc_frame_bg_opaque()[y*256+x-x0];
+                out[y*width+x]=native[y*256+nx];
+                coverage[y*width+x]=cyc_frame_bg_opaque()[y*256+nx];
                 continue;
             }
             out[y*width+x]=cyc_render_color(0);
@@ -156,13 +159,13 @@ static int render_inner(uint32_t *out,int width,int height,int x0,const uint32_t
      * have wrapped or the console's column guards interrupt the wide view. */
     if(menu)return 1;
     if(full){mm1_sprites_draw(out,width,x0,camera_x,mm1_coop_hud_active()?-2:-1,-16,coverage);return 1;}
-    mm1_video_paint_dust(out,width,x0,coverage);
+    mm1_video_paint_dust(out,width,native_origin,coverage);
     for(int i=ws.display.count-1;i>=0;i--) {
         WsSprite *s=&ws.display.tile[i];
         if(replaced&&mm1_video_replaces_actor(s->owner)) {
             if(s->owner&& !mm1_video_actor_has_oam(s->owner)) {
                 int first=1;for(int j=0;j<i;j++)if(ws.display.tile[j].owner==s->owner){first=0;break;}
-                if(first)mm1_video_paint_actor(out,width,x0,coverage,s->owner);
+                if(first)mm1_video_paint_actor(out,width,native_origin,coverage,s->owner);
             }
             continue;
         }
@@ -207,10 +210,10 @@ static void enable(int on) {
 void mm1_video_character_changed(void) {
     int character=mm1_proto_available()||mm1_charge_available()||mm1_slide_available()||mm1_coop_available()||mm1_sprites_enabled();
     for(size_t i=0;i<sizeof(hook_ids)/sizeof(hook_ids[0]);i++)
-        nes_mod_set_function_hook_enabled(hook_ids[i],enabled||mm1_coop_independent()||(character&&(i==0||i==1||i==2||i==6))||
+        nes_mod_set_function_hook_enabled(hook_ids[i],enabled||mm1_coop_available()||(character&&(i==0||i==1||i==2||i==6))||
             (mm1_weapon_cycle_available()&&(i==2||i==6)));
 #ifdef MM1_PROFILE_USA
-    nes_mod_set_function_hook_enabled("mm1.coop.spawn-candidate",mm1_coop_independent());
+    nes_mod_set_function_hook_enabled("mm1.coop.spawn-candidate",mm1_coop_available());
     nes_mod_set_function_hook_enabled("mm1.coop.view-hud",mm1_coop_available());
     nes_mod_set_function_hook_enabled("mm1.coop.hud-done",mm1_coop_available());
 #endif

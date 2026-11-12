@@ -82,6 +82,11 @@ and current-build state/audio continuation.
 Independent layouts keep their fixed grid widths through window resizing while
 retaining the selected aspect for the shared view. Paused P1/P2 view changes
 preserve the loaded background and each player's own native panel.
+The shared view centers between the living players, with a departing or arriving
+beam contributing gradually to that center. Its horizontal leash follows the
+common simulation width. Vertical movement, pit deaths and native room scripts
+retain the game's own rules. Camera placement is latched with the displayed
+picture and restored with current-build states and rollback.
 Native contact and weapon overlap tests also use the distant player's local
 coordinates. Targeted checks cover both characters' damage, personal refills,
 shared extra lives, charged shots and reflected shots beyond the main camera.

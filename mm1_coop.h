@@ -28,6 +28,8 @@ int mm1_coop_wait_both(void);
 int mm1_coop_view_can_set(int mode);
 int mm1_coop_view_locked(void);
 int mm1_coop_view_rects(int left[2]);
+int mm1_coop_shared_focus(int *center);
+int mm1_coop_shared_left(int fallback,int width,int left,int right);
 int mm1_coop_spawn_project(int seat);
 int mm1_coop_art_project(int seat);
 int mm1_coop_nearest(int x,int y);

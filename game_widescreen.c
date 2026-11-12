@@ -11,6 +11,7 @@ static void game_views_reset(void);
 static void game_shared_hud_paint(uint32_t *out,int width,int origin);
 static void game_hud_begin(void);
 static void game_hud_done(void);
+static int game_shared_camera(int width,int *source);
 static const char *hook_ids[]={"mm1.widescreen.draw","mm1.widescreen.emit","mm1.widescreen.build","mm1.widescreen.cull","mm1.widescreen.minor_cull","mm1.widescreen.spawn","mm1.widescreen.dma0"};
 static const uint16_t hook_addrs[]={MM_DRAW,MM_EMIT,MM_BUILD,0x9951,0xBE81,MM_SPAWN,MM_DMA0};
 #include "widescreen_common.h"
@@ -28,6 +29,12 @@ static int in_player_views(int x,int pad) {
     int left[2];if(!mm1_coop_view_rects(left))return 0;
     return (x+pad>=left[0]&&x-pad<left[0]+256)||(x+pad>=left[1]&&x-pad<left[1]+256);
 }
+static void shared_window(int *left,int *right) {
+    int width=extended?mm1_net_simulation_width(cyc_video_width()):256;
+    if(!enabled)width=256;
+    int native=game_camera(),fallback=native-(width-256)/2;
+    *left=mm1_coop_shared_left(fallback,width,R(0x27)*256,(R(0x28)+1)*256);*right=*left+width;
+}
 static int game_valid(void) {
     return R(0x31)<10 && mm1_coop_total()==32 && (mm1_coop_read(mm1_coop_anchor(),0x600)<248||mm1_coop_view_active()) && R(0x28)>=R(0x27) &&
            R(0x28)<48 && R(0x1B)>=R(0x27) && R(0x1B)<=R(0x28) &&
@@ -40,13 +47,13 @@ static void game_frame_end(void) {
     if(!game_valid()){ws.activation_scene=UINT32_MAX;return;}
     /* Fit can temporarily return to native width, where the wider loader is
      * bypassed. Retire records that have left the view during that interval. */
-    if((!mm1_coop_independent()&&(!extended||mm1_net_simulation_width(cyc_video_width())>256))||!graphics_ready||cached_stage!=R(0x31))return;
+    if((!mm1_coop_independent()&&!mm1_coop_available()&&(!extended||mm1_net_simulation_width(cyc_video_width())>256))||!graphics_ready||cached_stage!=R(0x31))return;
     int stage=R(0x31),ptr=graphics[0x2452+stage*2]|(graphics[0x2453+stage*2]<<8);
     if(ptr<0x8000 || ptr>=0xC000)return;
-    int cam=game_camera();
+    int cam=game_camera(),left=cam,right=cam+256;if(mm1_coop_available())shared_window(&left,&right);
     for(int i=0;i<256 && ptr-0x8000+i*4+3<0x4000;i++) {
         uint8_t *v=&graphics[ptr-0x8000+i*4];if(v[0]>=48)break;
-        int x=v[0]*256+v[1];if(mm1_coop_independent()?!in_player_views(x,16):(x<cam-16||x>=cam+272))ws.activated[i]=0;
+        int x=v[0]*256+v[1];if(mm1_coop_independent()?!in_player_views(x,16):(x<left-16||x>=right+16))ws.activated[i]=0;
     }
 }
 static void game_reset(void) {cached_stage=-1;graphics_ready=0;draw_pending=0;}
@@ -72,22 +79,23 @@ static void game_prepare_render(int width,int x0) {
 }
 static void game_draw_native(uint32_t *out,int width,int x0) {
     const uint8_t *oam=cyc_render_oam();
+    int source=camera_x;game_shared_camera(width,&source);int origin=x0+source-camera_x;
     int first=-1;for(int i=0;i<64;i++)if(mm1_proto_owns_slot(i)){first=i;break;}
     int pending=mm1_coop_picture(),insert=mm1_coop_insert_slot();
     for(int i=63;i>=0;i--) {
-        if(pending&&i<=insert){mm1_coop_paint(out,width,x0,coverage);pending=0;}
+        if(pending&&i<=insert){mm1_coop_paint(out,width,origin,coverage);pending=0;}
         if(mm1_coop_hud_owns_slot(i))continue;
         if(mm1_proto_owns_slot(i)) {
-            mm1_video_paint_slot(out,width,x0,coverage,i);
+            mm1_video_paint_slot(out,width,origin,coverage,i);
             continue;
         }
         const uint8_t *o=oam+i*4;if(o[0]>=239)continue;
-        int kind=ws.display_oam_kind[i],x=o[3],force=0;
+        int kind=ws.display_oam_kind[i],x=o[3]+source-camera_x,force=source!=camera_x;
         if(kind==1){x=ws.display_oam_x[i]-camera_x;force=x!=o[3];}
         if(kind==2){x=ws.display_oam_x[i]-x0;force=1;}
         draw_tile(out,width,x0,x0+x,o[0]+1,o[1],o[2],force||first>=0||mm1_video_dust_visible()||mm1_coop_picture());
     }
-    if(pending)mm1_coop_paint(out,width,x0,coverage);
+    if(pending)mm1_coop_paint(out,width,origin,coverage);
 }
 static void game_dma(void) {
     /* Native HUD tiles are screen-space, never world-space actors. */
@@ -99,7 +107,7 @@ static void game_dma(void) {
     }
 }
 static void capture_native_tile(void) {
-    if((!enabled&&!mm1_coop_independent())||!draw_pending)return;
+    if((!enabled&&!mm1_coop_available())||!draw_pending)return;
     CycModRegs regs;cyc_mod_regs(&regs);
     int slot=regs.x/4+1,a=0x200+slot*4;
     if(slot>=64 || R(a)>=239)return;
@@ -223,7 +231,7 @@ static void capture_actor(void) {
 static void load_visible(void) {
     if(!cache_rom() || R(0x3E))return;
     int cam=game_camera(),margin=(mm1_net_simulation_width(cyc_video_width())-256)/2;
-    int left=cam-margin-16,right=cam+256+margin+16;
+    int left=cam-margin,right=cam+256+margin;if(mm1_coop_available())shared_window(&left,&right);left-=16;right+=16;
     int stage=R(0x31),ptr=graphics[0x2452+stage*2]|(graphics[0x2453+stage*2]<<8);
     if(ptr<0x8000 || ptr>=0xC000)return;
     uint32_t scene=(uint32_t)((stage<<12)|(R(0x27)<<6)|R(0x28));
@@ -234,7 +242,7 @@ static void load_visible(void) {
         uint8_t *v=&graphics[ptr-0x8000+i*4];
         int x=v[0]*256+v[1];if(v[0]>=48)break;
         if(x<left || x>=right){ws.activated[i]=0;continue;}
-        if((x>=cam && x<cam+256) || v[0]<R(0x27) || v[0]>R(0x28) || v[2]>=248 || v[3]==255)continue;
+        if((!mm1_coop_available()&&x>=cam&&x<cam+256)||v[0]<R(0x27)||v[0]>R(0x28)||v[2]>=248||v[3]==255)continue;
         int resident=0;
         for(int n=16;n<32;n++)if(R(0x600+n)<248 && R(0x6B+n)==i)resident=1;
         if(resident)ws.activated[i]=1;
@@ -305,7 +313,7 @@ static int hook(uint16_t addr) {
         return 0;
     }
     if(addr==MM_DMA0){apply_camera_rebase();int previous=mm1_coop_dma_begin();mm1_weapon_gfx_latch();if(!mm1_coop_independent_scene())mm1_proto_draw_latch();mm1_coop_video_latch();game_views_latch();mm1_sprites_latch();
-        mm1_coop_present_end(previous);if(enabled||mm1_coop_independent())dma_packet();return 0;}
+        mm1_coop_present_end(previous);if(enabled||mm1_coop_available())dma_packet();return 0;}
     if(addr==MM_BUILD){
         mm1_coop_intro_draw();
         mm1_coop_draw_begin();
@@ -318,23 +326,25 @@ static int hook(uint16_t addr) {
         ws.build.count=0;memset(ws.build_oam_kind,0,sizeof ws.build_oam_kind);draw_pending=0;return 0;
     }
     if(addr==MM_DRAW){mm1_coop_primary_body();if(mm1_coop_draw_suppressed()&&(R(0x0C)==0||(R(0x0C)>=2&&R(0x0C)<16)))return 1;
-        if((enabled||mm1_coop_independent())&&game_valid())capture_actor();mm1_proto_pose_begin();return 0;}
+        if((enabled||mm1_coop_available())&&game_valid())capture_actor();mm1_proto_pose_begin();return 0;}
     if(addr==MM_EMIT){
-        if((enabled||mm1_coop_independent())&&game_valid())capture_native_tile();
+        if((enabled||mm1_coop_available())&&game_valid())capture_native_tile();
         CycModRegs regs;cyc_mod_regs(&regs);mm1_proto_part_emitted(regs.x/4+1);return 0;
     }
-    if(addr==MM_SPAWN_OBJECT&&mm1_coop_independent()&&!cyc_mod_isolated()&&game_valid()) {
+    if(addr==MM_SPAWN_OBJECT&&mm1_coop_available()&&!cyc_mod_isolated()&&game_valid()) {
         CycModRegs r={0};cyc_mod_regs(&r);if(r.a==255||R(1)>=248)return 0;
-        return !in_player_views(R(5)*256+R(0),16)||ws.activated[r.x];
+        int x=R(5)*256+R(0),left,right;shared_window(&left,&right);
+        return (mm1_coop_independent()?!in_player_views(x,16):(x<left-16||x>=right+16))||ws.activated[r.x];
     }
-    if(!enabled&&!mm1_coop_independent())return 0;
+    if(!enabled&&!mm1_coop_available())return 0;
     if(!game_valid())return 0;
-    if(!mm1_coop_independent()&&(!extended||mm1_net_simulation_width(cyc_video_width())<=256))return 0;
+    if(!mm1_coop_available()&&(!extended||mm1_net_simulation_width(cyc_video_width())<=256))return 0;
     if(addr==MM_SPAWN){if(mm1_coop_independent())load_independent();else load_visible();return 0;}
     if(addr==0x9951 || addr==0xBE81) {
         CycModRegs regs;cyc_mod_regs(&regs);
-        int cam=game_camera(),margin=(mm1_net_simulation_width(cyc_video_width())-256)/2,x=actor_x(regs.x);
-        if(regs.x<32 && (mm1_coop_independent()?in_player_views(x,16):(x>=cam-margin-16&&x<cam+256+margin+16))) {
+        int cam=game_camera(),margin=(mm1_net_simulation_width(cyc_video_width())-256)/2,x=actor_x(regs.x),left=cam-margin,right=cam+256+margin;
+        if(mm1_coop_available())shared_window(&left,&right);
+        if(regs.x<32 && (mm1_coop_independent()?in_player_views(x,16):(x>=left-16&&x<right+16))) {
             /* This is the BEQ after the high-byte screen subtraction, not a
              * subroutine. Change its condition and let the original branch run. */
             regs.a=0;regs.p=(uint8_t)((regs.p&~0x80)|2);cyc_mod_set_regs(&regs);retains++;
@@ -350,11 +360,19 @@ static void game_debug(char *out,size_t cap) {
 
 typedef struct {uint8_t x,y,attr,height,pattern[32],palette[4];} ViewHud;
 typedef struct {
-    uint8_t active,native_scene,odd,stage,ready,hud_count[2],native_script,hud_shared;
+    uint8_t active,native_scene,odd,stage,ready,hud_count[2],native_script,hud_shared,shared_camera;
     int16_t camera,left[2];uint8_t tile[2][30][33],palette[2][30][33];ViewHud hud[2][32];
+    int16_t focus,room_left,room_right;
     uint64_t hud_mask;uint8_t hud_oam[256];
 } ViewFrame;
 static ViewFrame view_build,view_shown;
+static int game_shared_camera(int width,int *source) {
+    if(!mm1_coop_available()||mm1_coop_independent()||!view_shown.shared_camera||view_shown.stage!=R(0x31))return 0;
+    *source=unwrap(cyc_render_line_scroll_x(80),view_shown.camera,WS_SCROLL_PERIOD);
+    int left=view_shown.room_left,right=view_shown.room_right;
+    if(right-left<width)return left+(right-left-width)/2;
+    int view=view_shown.focus-width/2;if(view<left)view=left;if(view>right-width)view=right-width;return view;
+}
 static int16_t hud_cursor=-1;
 static uint8_t hud_draw;
 static uint32_t view_native[256*240],view_picture[2][256*240];
@@ -400,6 +418,10 @@ static void game_views_build(void) {
     if(!mm1_coop_independent()) {
         if(mm1_coop_view_active()&&R(0x31)<10&&R(0x54)==32) {
             view_build.stage=R(0x31);view_build.hud_shared=1;
+            int focus;if(!mm1_coop_view_locked()&&mm1_coop_shared_focus(&focus)) {
+                view_build.shared_camera=1;view_build.focus=(int16_t)focus;
+                view_build.camera=(int16_t)game_camera();view_build.room_left=R(0x27)*256;view_build.room_right=(R(0x28)+1)*256;
+            }
             for(int seat=0;seat<2;seat++)view_hud(seat);
         }return;
     }
@@ -488,14 +510,15 @@ static int game_render_views(uint32_t *out,int width,int height,const uint32_t *
 }
 typedef struct {char magic[4];ViewFrame build,shown;CameraRebase rebase;int16_t hud_cursor;uint8_t hud_draw;} ViewsState;
 static int views_get(uint8_t *out,int cap) {
-    if(cap<(int)sizeof(ViewsState))return -1;ViewsState s={0};memcpy(s.magic,"MV04",4);s.build=view_build;s.shown=view_shown;s.rebase=camera_rebase;s.hud_cursor=hud_cursor;s.hud_draw=hud_draw;
+    if(cap<(int)sizeof(ViewsState))return -1;ViewsState s={0};memcpy(s.magic,"MV05",4);s.build=view_build;s.shown=view_shown;s.rebase=camera_rebase;s.hud_cursor=hud_cursor;s.hud_draw=hud_draw;
     memcpy(out,&s,sizeof s);return sizeof s;
 }
 static int views_valid(const uint8_t *in,int size) {
-    if(!size)return 1;ViewsState s;if(!in||size!=sizeof s)return 0;memcpy(&s,in,sizeof s);if(memcmp(s.magic,"MV04",4)||s.rebase.pending>1||s.hud_draw>1||s.hud_cursor< -1||s.hud_cursor>248||(s.hud_cursor>=0&&(s.hud_cursor&3))||
+    if(!size)return 1;ViewsState s;if(!in||size!=sizeof s)return 0;memcpy(&s,in,sizeof s);if(memcmp(s.magic,"MV05",4)||s.rebase.pending>1||s.hud_draw>1||s.hud_cursor< -1||s.hud_cursor>248||(s.hud_cursor>=0&&(s.hud_cursor&3))||
         (s.rebase.pending&&(s.rebase.stage>=10||s.rebase.camera>47*256)))return 0;
     const ViewFrame *v[]={&s.build,&s.shown};for(int k=0;k<2;k++) {
-        if(v[k]->active>1||v[k]->native_scene>1||v[k]->native_script>1||v[k]->hud_shared>1||v[k]->odd>1||v[k]->ready>1||((v[k]->active||v[k]->hud_shared)&&v[k]->stage>=10))return 0;
+        if(v[k]->active>1||v[k]->native_scene>1||v[k]->native_script>1||v[k]->hud_shared>1||v[k]->shared_camera>1||v[k]->odd>1||v[k]->ready>1||((v[k]->active||v[k]->hud_shared)&&v[k]->stage>=10))return 0;
+        if(v[k]->shared_camera&&(v[k]->focus<0||v[k]->focus>=48*256||v[k]->room_left<0||v[k]->room_right>48*256||v[k]->room_right<=v[k]->room_left))return 0;
         for(int seat=0;seat<2;seat++) {
             if(v[k]->hud_count[seat]>32||v[k]->left[seat]<0||v[k]->left[seat]>47*256)return 0;
             for(int y=0;y<30;y++)for(int x=0;x<33;x++)if(v[k]->palette[seat][y][x]>3)return 0;

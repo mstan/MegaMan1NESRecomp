@@ -92,6 +92,40 @@ int mm1_coop_view_can_set(int mode) {
     return mode>=0&&mode<=3&&((!C.initialized&&!mm1_net_locked())||((mode!=0)==mm1_coop_independent()));
 }
 int mm1_coop_view_locked(void){return C.wiping||R(0x1E)||R(0x26)||R(0x68)||R(0x3E)||(!C.initialized);}
+int mm1_coop_shared_focus(int *center) {
+    if(!enabled||view_mode||!C.initialized||C.stage!=R(0x31)||R(0x31)>=10)return 0;
+    int total=0,weight=0;
+    for(int seat=0;seat<2;seat++) {
+        Player *p=&C.players[seat];if(p->dead||p->teleport==TELE_HIDDEN)continue;
+        int w=256;
+        if(p->teleport==TELE_IN||p->teleport==TELE_OUT) {
+            w=p->beam_floor?p->beam_y*256/p->beam_floor:0;if(w<0)w=0;if(w>256)w=256;
+        }else if(!p->teleport&&(C.withdrawn&(1u<<seat)))continue;
+        int x=mm1_coop_read(seat,0x460)*256+mm1_coop_read(seat,0x480);
+        total+=x*w;weight+=w;
+    }
+    if(!weight)return 0;*center=total/weight;return 1;
+}
+int mm1_coop_shared_left(int fallback,int width,int left,int right) {
+    int focus;if(mm1_coop_view_locked()||!mm1_coop_shared_focus(&focus))return fallback;
+    if(right-left<width)return left+(right-left-width)/2;
+    int view=focus-width/2;if(view<left)view=left;if(view>right-width)view=right-width;return view;
+}
+static void limit_shared_player(void) {
+    if(!enabled||view_mode||!C.initialized||mm1_coop_view_locked()||C.room_follow||C.waiting)return;
+    int seat=C.current,other=seat^1;
+    if(mm1_coop_seat_blocked(seat)||mm1_coop_seat_blocked(other)||(C.withdrawn&3)||
+       !mm1_coop_read(seat,0x6A)||!mm1_coop_read(other,0x6A))return;
+    int span=mm1_net_simulation_width(cyc_video_width())-48;if(span<96)span=96;
+    int x=R(0x460)*256+R(0x480),peer=mm1_coop_read(other,0x460)*256+mm1_coop_read(other,0x480),clamped=x;
+    if(clamped<peer-span)clamped=peer-span;if(clamped>peer+span)clamped=peer+span;
+    if(clamped!=x){W(0x460,clamped>>8);W(0x480,clamped);W(0x4A0,0);}
+    /* MM1's vertical coordinates also drive its real pit/room exits. Only
+       horizontal separation is constrained; native vertical death remains. */
+}
+static int shared_after_controller(uint16_t address) {
+    (void)address;if(!cyc_mod_isolated())limit_shared_player();return 0;
+}
 int mm1_widescreen_mode(void);
 void mm1_world_views_reset(void);
 void mm1_coop_view_policy(void){
@@ -472,7 +506,10 @@ static int private_scroll(uint16_t address) {
 static int living_visible(int seat) {
     Player *p=&C.players[seat];if(p->dead||p->teleport||(C.withdrawn&(1u<<seat))||!mm1_coop_read(seat,0x6A))return 0;
     int x=mm1_coop_read(seat,0x460)*256+mm1_coop_read(seat,0x480),y=mm1_coop_read(seat,0x600),left=R(0x1B)*256+R(0x1A);
-    return y>=16&&y<=222&&x+12>left&&x-12<=left+255;
+    int width=256,views[2];
+    if(mm1_coop_view_rects(views))left=views[seat];
+    else {width=mm1_net_simulation_width(cyc_video_width());left=mm1_coop_shared_left(left-(width-256)/2,width,R(0x27)*256,(R(0x28)+1)*256);}
+    return y>=16&&y<=222&&x+12>left&&x-12<left+width;
 }
 static int safe_position(int peer,int *x,int *y) {
     if(!living_visible(peer)||mm1_coop_read(peer,0x420)&31||mm1_coop_read(peer,0x95)||mm1_coop_read(peer,0xAD))return 0;
@@ -631,7 +668,7 @@ int mm1_coop_dispatch(void) {
     mm1_weapons_player_dispatch();mm1_charge_dispatch();
     int ok=private_call(0x94A8,&regs,0,1);
     int lead=ok&&!p->dead&&private_exit;
-    if(ok&&!p->dead){mm1_slide_after_run();mm1_slide_restore_input();if(!lead)ok=private_call(0xA35C,&regs,0,1);}
+    if(ok&&!p->dead){mm1_slide_after_run();mm1_slide_restore_input();if(!lead){limit_shared_player();ok=private_call(0xA35C,&regs,0,1);}}
     if(p->dead)enforce_dead();
     if(ok){capture(p);C.updates++;}else C.failures++;
     for(int i=0;i<2048;i++)after[i]=R(i);
@@ -980,6 +1017,7 @@ static void set_enabled(int on) {
     nes_mod_set_function_hook_enabled("mm1.coop.room-next",enabled);nes_mod_set_function_hook_enabled("mm1.coop.room-previous",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.room-gate",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.controller-completed",enabled);
+    nes_mod_set_function_hook_enabled("mm1.coop.shared-after-controller",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.pit-continuation",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.private-scroll-left",enabled);nes_mod_set_function_hook_enabled("mm1.coop.private-scroll-right",enabled);
     nes_mod_set_function_hook_enabled("mm1.coop.draw-part",enabled);
@@ -1138,6 +1176,7 @@ NES_MOD_CONSTRUCTOR(register_mm1_coop) {
        !nes_mod_register_function_entry_plugin("mm1.coop.room-previous",0x925B,room_begin)||
        !nes_mod_register_function_entry_plugin("mm1.coop.room-gate",0x9207,room_gate)||
        !nes_mod_register_function_entry_plugin("mm1.coop.controller-completed",0x918A,controller_completed)||
+       !nes_mod_register_function_entry_plugin("mm1.coop.shared-after-controller",0x918D,shared_after_controller)||
        !nes_mod_register_function_entry_plugin("mm1.coop.pit-continuation",0x9251,pit_continuation)||
        !nes_mod_register_function_entry_plugin("mm1.coop.private-scroll-left",0x9F9E,private_scroll)||
        !nes_mod_register_function_entry_plugin("mm1.coop.private-scroll-right",0x9F6D,private_scroll))abort();

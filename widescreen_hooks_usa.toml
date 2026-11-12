@@ -397,6 +397,12 @@ bank = 5
 bytes = "20 A8 94 A5 94 F0 09 A5"
 
 [[mod_function_hook]]
+id = "mm1.coop.shared-after-controller"
+addr = 0x918D
+bank = 5
+bytes = "A5 94 F0 09 A5 B1 D0 05"
+
+[[mod_function_hook]]
 id = "mm1.coop.pit-continuation"
 addr = 0x9251
 bank = 5

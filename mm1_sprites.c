@@ -1,6 +1,7 @@
 /* Complete native art packets; pure captures leave the original OAM/AI intact. */
 #include "mm1_sprites.h"
 #include "mm1_coop.h"
+#include "mm1_net.h"
 #include "mm1_proto_video.h"
 #include "mm1_weapon_gfx.h"
 #include "cyc_host_extras.h"
@@ -132,6 +133,7 @@ void mm1_sprites_draw(uint32_t *out,int width,int origin,int camera,int hud_seat
     }
 }
 static void set_enabled(int on){
+    if(mm1_net_locked())return;
 #ifndef MM1_PROFILE_USA
     on=0;
 #endif

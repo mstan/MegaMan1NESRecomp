@@ -4,6 +4,7 @@
 #include "mm1_reflect.h"
 #include "mm1_slide.h"
 #include "mm1_coop.h"
+#include "mm1_net.h"
 #include "cyc_core.h"
 #include "cyc_mod.h"
 #include "cyc_ring.h"
@@ -166,6 +167,7 @@ static int enemy_damage(uint16_t address) {
 static int damage_after(uint16_t address){(void)address;clear_override();return 0;}
 static int stage_exit(uint16_t address){(void)address;mm1_charge_stage_enter();return 0;}
 static void set_enabled(int on) {
+    if(mm1_net_locked())return;
 #ifndef MM1_PROFILE_USA
     on=0;
 #endif
@@ -184,6 +186,9 @@ static int load_donor(const char *path) {
 }
 int mm1_mm4_load(const char *feature) {
     const char *path=donor_path[0]?donor_path:nes_mod_external_rom_path(PACKAGE,feature,"mm4-usa");
+#ifdef NESRECOMP_NET
+    if(!path&&!donor_path[0])path=nes_mod_netplay_external_rom_path(PACKAGE,feature,"mm4-usa");
+#endif
     return load_donor(path);
 }
 static void power_on(void *ctx){
@@ -228,11 +233,10 @@ static int put(const uint8_t *in,int len) {
 }
 static void reset(void){set_enabled(0);}
 static void activate(void) {
-    const char *path=nes_mod_external_rom_path(PACKAGE,"charge","mm4-usa");
-    if(!load_donor(path))return;cyc_mm4_audio_reset();set_enabled(1);
+    if(mm1_net_locked()||!mm1_mm4_load("charge"))return;cyc_mm4_audio_reset();set_enabled(1);
 }
 static bool option(void *ctx,const char *name,const char *value) {
-    (void)ctx;
+    (void)ctx;if(mm1_net_locked())return false;
     if(!strcmp(name,"--mm4-rom")) {
         if(strlen(value)>=sizeof donor_path||!load_donor(value))return false;
         strcpy(donor_path,value);return true;
@@ -240,7 +244,7 @@ static bool option(void *ctx,const char *name,const char *value) {
     if(!strcmp(name,"--charge-report")){report=fopen(value,"w");return report!=NULL;}
     if(strcmp(name,"--charge"))return false;
     if(strcmp(value,"off")&&strcmp(value,"on"))return false;
-    if(!strcmp(value,"on")&&(!donor_path[0]||!load_donor(donor_path)))return false;
+    if(!strcmp(value,"on")&&!mm1_mm4_load("charge"))return false;
     set_enabled(!strcmp(value,"on"));return enabled==!strcmp(value,"on");
 }
 const CycHostExtras *mm1_charge_extras(void) {

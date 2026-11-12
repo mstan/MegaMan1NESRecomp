@@ -3,6 +3,7 @@
 #include "cyc_core.h"
 #include "cyc_ring.h"
 #include "mod_runtime.h"
+#include "mm1_net.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -13,7 +14,7 @@ static void apply(void) {
     if(cyc_extra_scanlines()!=selected&&!cyc_set_extra_scanlines(selected))
         fprintf(stderr,"[Mods] slowdown reduction: extra CPU time is unavailable for this cartridge\n");
 }
-static void select_lines(unsigned lines){selected=lines;apply();}
+static void select_lines(unsigned lines){if(mm1_net_locked())return;selected=lines;apply();}
 static void power_on(void *ctx){(void)ctx;apply();}
 static void state_loaded(void *ctx){(void)ctx;apply();}
 static void frame_end(void *ctx) {

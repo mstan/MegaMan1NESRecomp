@@ -3,6 +3,8 @@
 #include "cyc_protoman_atlas.h"
 int mm1_proto_available(void);
 void mm1_proto_coop_enable(int on);
+void mm1_proto_settings(int *wanted,int *mode,int *start);
+int mm1_proto_configure(int wanted,int mode,int start);
 int mm1_proto_selected(void);
 int mm1_proto_teleporting(void);
 int mm1_proto_dispatch(void);

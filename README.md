@@ -119,8 +119,15 @@ Co-op is available in Mods with character roster, view and room-transition
 choices. It retains the required character support regardless of command-line
 option order, and disabling co-op restores the requested solo character choice.
 Targeted catalog checks cover both default enhancements, the selected split
-view and roster, and current-build state/audio continuation. Full-stage
-transition coverage and online play are still being implemented.
+view and roster, and current-build state/audio continuation.
+Enable Co-op in Mods before creating an online room. The shared netplay driver
+negotiates the roster, abilities, timing and gameplay view policy before play.
+Split, P1 and P2 remain local presentation choices within an independent-view
+match. Shared and independent gameplay policies stay fixed for that match.
+Targeted desktop/SERVER LAN checks use native and interpreter execution with
+delayed rollback, both native inventories, charged shots and sliding. Required
+donor ROMs are verified again during admission; missing or wrong images refuse
+the match. Full-stage coverage and final release qualification remain open.
 
 ## Cycle backend migration branch
 

@@ -8,6 +8,8 @@ set(NESRECOMP_ROOT "${CMAKE_SOURCE_DIR}/nesrecomp" CACHE PATH "NESRecomp engine 
 set(NESRECOMP_BACKEND "cycle" CACHE STRING "CPU backend: cycle or legacy")
 set_property(CACHE NESRECOMP_BACKEND PROPERTY STRINGS cycle legacy)
 option(MM1_TEST_NMI_CONTINUATION "Test build: inject one native wait in a reflected-shot continuation" OFF)
+option(MM1_NETPLAY_QUALIFIED "Enable the qualified MM1 online simulation profile" ON)
+option(MM1_ENABLE_NETPLAY "Build shared rollback netplay and lobby" ON)
 if(MM1_TEST_NMI_CONTINUATION)
     set_source_files_properties(mm1_reflect.c PROPERTIES COMPILE_DEFINITIONS MM1_TEST_NMI_CONTINUATION=1)
 endif()
@@ -75,6 +77,7 @@ if(NESRECOMP_BACKEND STREQUAL "cycle")
             "${CMAKE_CURRENT_SOURCE_DIR}/mm1_coop_menu.c"
             "${CMAKE_CURRENT_SOURCE_DIR}/mm1_slowdown.c"
             "${CMAKE_CURRENT_SOURCE_DIR}/mm1_sprites.c"
+            "${CMAKE_CURRENT_SOURCE_DIR}/mm1_net.c"
             "${NESRECOMP_ROOT}/runner/cyc/cyc_protoman_atlas.c"
             "${NESRECOMP_ROOT}/runner/cyc/cyc_mm4_donor.c"
             "${NESRECOMP_ROOT}/runner/cyc/cyc_mm4_audio.c"
@@ -86,6 +89,10 @@ if(NESRECOMP_BACKEND STREQUAL "cycle")
         BOXART "${CMAKE_CURRENT_SOURCE_DIR}/boxart.tga" ${MEGAMAN_WIDESCREEN_ARGS})
     if(megaman_variant STREQUAL "usa")
         target_compile_definitions(MegaManRecomp PRIVATE MM1_PROFILE_USA=1)
+        target_compile_definitions(MegaManRecomp PRIVATE MM1_NETPLAY_QUALIFIED=$<BOOL:${MM1_NETPLAY_QUALIFIED}>)
+        if(MM1_ENABLE_NETPLAY OR NESRECOMP_ENABLE_NET)
+            nesrecomp_enable_recomp_net(MegaManRecomp)
+        endif()
     endif()
     target_include_directories(MegaManRecomp PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
         "${CMAKE_CURRENT_BINARY_DIR}" "${NESRECOMP_ROOT}/runner/src")

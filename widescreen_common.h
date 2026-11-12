@@ -18,6 +18,7 @@
 #include "mm1_coop.h"
 #include "mm1_coop_menu.h"
 #include "mm1_sprites.h"
+#include "mm1_net.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -60,6 +61,9 @@ static void game_draw_native(uint32_t *out,int width,int x0);
 static void game_dma(void);
 static void enable(int on);
 int mm1_widescreen_mode(void){return enabled?aspect:NES_VIDEO_STOCK;}
+int mm1_widescreen_enabled(void){return enabled;}
+int mm1_widescreen_extended(void){return extended;}
+int mm1_widescreen_aspect(void){return aspect;}
 
 static int unwrap(int captured,int expected,int period) {
     int delta=(captured-expected+period/2)%period;
@@ -192,6 +196,7 @@ static void verify_map(void) {
     }
 }
 static void enable(int on) {
+    if(mm1_net_locked())return;
     enabled=on;
     mm1_video_character_changed();
     cyc_video_set_mode(on?aspect:NES_VIDEO_STOCK);
@@ -216,13 +221,14 @@ void mm1_video_character_changed(void) {
 }
 static void reset_mod(void) {enable(0);}
 static void activate(void) {
+    if(mm1_net_locked())return;
     char a[32]="fit",e[32]="viewport";
     nes_mod_option_value(WS_PACKAGE,"widescreen","aspect",a,sizeof a);
     nes_mod_option_value(WS_PACKAGE,"widescreen","enemy_activation",e,sizeof e);
     nes_video_geometry_parse(a,&aspect);extended=!strcmp(e,"viewport");enable(1);
 }
 static bool option(void *ctx,const char *name,const char *value) {
-    (void)ctx;
+    (void)ctx;if(mm1_net_locked())return false;
     if(!strcmp(name,"--widescreen")) {
         if(!strcmp(value,"off")){enable(0);return true;}
         int m;if(!nes_video_geometry_parse(value,&m)||m==NES_VIDEO_STOCK)return false;

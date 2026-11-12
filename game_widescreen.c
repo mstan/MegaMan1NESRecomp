@@ -37,7 +37,7 @@ static void game_frame_end(void) {
     if(!game_valid()){ws.activation_scene=UINT32_MAX;return;}
     /* Fit can temporarily return to native width, where the wider loader is
      * bypassed. Retire records that have left the view during that interval. */
-    if((!mm1_coop_independent()&&(!extended||cyc_video_width()>256))||!graphics_ready||cached_stage!=R(0x31))return;
+    if((!mm1_coop_independent()&&(!extended||mm1_net_simulation_width(cyc_video_width())>256))||!graphics_ready||cached_stage!=R(0x31))return;
     int stage=R(0x31),ptr=graphics[0x2452+stage*2]|(graphics[0x2453+stage*2]<<8);
     if(ptr<0x8000 || ptr>=0xC000)return;
     int cam=game_camera();
@@ -218,7 +218,7 @@ static void capture_actor(void) {
  * generator and room-control records retain their native activation. */
 static void load_visible(void) {
     if(!cache_rom() || R(0x3E))return;
-    int cam=game_camera(),margin=(cyc_video_width()-256)/2;
+    int cam=game_camera(),margin=(mm1_net_simulation_width(cyc_video_width())-256)/2;
     int left=cam-margin-16,right=cam+256+margin+16;
     int stage=R(0x31),ptr=graphics[0x2452+stage*2]|(graphics[0x2453+stage*2]<<8);
     if(ptr<0x8000 || ptr>=0xC000)return;
@@ -321,11 +321,11 @@ static int hook(uint16_t addr) {
     }
     if(!enabled&&!mm1_coop_independent())return 0;
     if(!game_valid())return 0;
-    if(!mm1_coop_independent()&&(!extended||cyc_video_width()<=256))return 0;
+    if(!mm1_coop_independent()&&(!extended||mm1_net_simulation_width(cyc_video_width())<=256))return 0;
     if(addr==MM_SPAWN){if(mm1_coop_independent())load_independent();else load_visible();return 0;}
     if(addr==0x9951 || addr==0xBE81) {
         CycModRegs regs;cyc_mod_regs(&regs);
-        int cam=game_camera(),margin=(cyc_video_width()-256)/2,x=actor_x(regs.x);
+        int cam=game_camera(),margin=(mm1_net_simulation_width(cyc_video_width())-256)/2,x=actor_x(regs.x);
         if(regs.x<32 && (mm1_coop_independent()?in_player_views(x,16):(x>=cam-margin-16&&x<cam+256+margin+16))) {
             /* This is the BEQ after the high-byte screen subtraction, not a
              * subroutine. Change its condition and let the original branch run. */

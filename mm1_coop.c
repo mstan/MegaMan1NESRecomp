@@ -7,6 +7,7 @@
 #include "mm1_slide.h"
 #include "mm1_weapon_gfx.h"
 #include "mm1_coop_menu.h"
+#include "mm1_net.h"
 #include "cyc_mod.h"
 #include "cyc_mm4_audio.h"
 #include "cyc_render.h"
@@ -85,6 +86,11 @@ int mm1_coop_independent_scene(void){return mm1_coop_independent()&&C.initialize
 int mm1_coop_draw_suppressed(void){return mm1_coop_independent_scene()&&C.view_drawing;}
 int mm1_coop_draw_camera(void){return C.drawing==2?private_camera:R(0x1B)*256+R(0x1A);}
 int mm1_coop_view_mode(void){return view_mode;}
+int mm1_coop_roster(void){return roster;}
+int mm1_coop_wait_both(void){return wait_both;}
+int mm1_coop_view_can_set(int mode) {
+    return mode>=0&&mode<=3&&((!C.initialized&&!mm1_net_locked())||((mode!=0)==mm1_coop_independent()));
+}
 int mm1_coop_view_locked(void){return C.wiping||R(0x1E)||R(0x26)||R(0x68)||R(0x3E)||(!C.initialized);}
 int mm1_widescreen_mode(void);
 void mm1_world_views_reset(void);
@@ -965,6 +971,7 @@ static int checkpoint_restart(uint16_t address) {
     if(r.a<at){r.a=(uint8_t)at;cyc_mod_set_regs(&r);}return 0;
 }
 static void set_enabled(int on) {
+    if(mm1_net_locked())return;
 #ifndef MM1_PROFILE_USA
     on=0;
 #endif
@@ -1058,12 +1065,15 @@ static int valid(const uint8_t *in,int len) {
 }
 static int put(const uint8_t *in,int len){if(!valid(in,len))return 0;memset(&C,0,sizeof C);if(len)memcpy(&C,in,sizeof C);return 1;}
 static bool option(void *ctx,const char *name,const char *value) {
-    (void)ctx;if(!strcmp(name,"--coop-report")){report=fopen(value,"w");return report!=NULL;}
+    (void)ctx;if(mm1_net_locked()&&strcmp(name,"--coop-view"))return false;
+    if(!strcmp(name,"--coop-report")){report=fopen(value,"w");return report!=NULL;}
     if(!strcmp(name,"--coop-wait-both")){if(strcmp(value,"on")&&strcmp(value,"off"))return false;wait_both=!strcmp(value,"on");return true;}
     if(!strcmp(name,"--coop-view")) {
         if(strcmp(value,"shared")&&strcmp(value,"split")&&strcmp(value,"p1")&&strcmp(value,"p2"))return false;
+        int next=!strcmp(value,"split")?1:!strcmp(value,"p1")?2:!strcmp(value,"p2")?3:0;
+        if(!mm1_coop_view_can_set(next))return false;
         int was_independent=mm1_coop_independent();
-        view_mode=!strcmp(value,"split")?1:!strcmp(value,"p1")?2:!strcmp(value,"p2")?3:0;
+        view_mode=next;
         nes_mod_set_function_hook_enabled("mm1.coop.private-oam-full",mm1_coop_independent());
         if(was_independent!=mm1_coop_independent()){C.view_ready=C.view_drawing=C.view_visible=0;mm1_world_views_reset();}
         mm1_video_character_changed();mm1_coop_view_policy();return true;
@@ -1081,8 +1091,9 @@ static bool option(void *ctx,const char *name,const char *value) {
     if(strcmp(name,"--coop"))return false;if(strcmp(value,"on")&&strcmp(value,"off"))return false;
     set_enabled(!strcmp(value,"on"));return enabled==!strcmp(value,"on");
 }
-static void reset(void){view_mode=wait_both=roster=0;set_enabled(0);}
+static void reset(void){if(mm1_net_locked())return;view_mode=wait_both=roster=0;set_enabled(0);}
 static void activate(void) {
+    if(mm1_net_locked())return;
     const char *package="mega-man-usa.coop";char value[32]="shared";
     nes_mod_option_value(package,"coop","coop-view",value,sizeof value);option(NULL,"--coop-view",value);
     strcpy(value,"megaman");nes_mod_option_value(package,"coop","player-one",value,sizeof value);option(NULL,"--coop-p1",value);

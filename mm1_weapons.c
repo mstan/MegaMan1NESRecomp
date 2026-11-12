@@ -8,6 +8,7 @@
 #include "mm1_charge.h"
 #include "mm1_slide.h"
 #include "mm1_coop.h"
+#include "mm1_net.h"
 #include "mm1_weapon_gfx.h"
 #include "logical_input.h"
 #include "mod_runtime.h"
@@ -49,6 +50,7 @@ void mm1_controls_refresh(void) {
     mm1_video_character_changed();
 }
 static void set_enabled(int on) {
+    if(mm1_net_locked())return;
 #ifdef MM1_PROFILE_USA
     enabled=on!=0;
 #else

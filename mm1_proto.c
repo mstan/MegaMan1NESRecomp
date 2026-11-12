@@ -5,6 +5,10 @@
 #include "mm1_reflect.h"
 #include "mm1_slide.h"
 #include "mm1_coop.h"
+#include "mm1_net.h"
+#ifdef NESRECOMP_NET
+#include "nes_netplay_identity.h"
+#endif
 #include "cyc_core.h"
 #include "cyc_mod.h"
 #include "cyc_render.h"
@@ -35,6 +39,14 @@ void mm1_controls_refresh(void);
 int mm1_controls_safe(void);
 
 int mm1_proto_available(void){return enabled;}
+void mm1_proto_settings(int *wanted,int *mode,int *start){*wanted=requested;*mode=real_mode;*start=start_proto;}
+int mm1_proto_source_hash(uint8_t out[32]) {
+#ifdef NESRECOMP_NET
+    uint8_t both[64];nes_sha256(MM1_PROTO_PNG,sizeof MM1_PROTO_PNG,both);nes_sha256(MM1_PROTO_JUMP_PNG,sizeof MM1_PROTO_JUMP_PNG,both+32);nes_sha256(both,sizeof both,out);return 1;
+#else
+    (void)out;return 0;
+#endif
+}
 int mm1_proto_selected(void){return enabled&&(mm1_coop_available()?mm1_coop_character():state.selected);}
 int mm1_proto_teleporting(void){return enabled&&state.teleport;}
 int mm1_proto_real_traits(void){return mm1_proto_selected()&&real_mode;}
@@ -51,6 +63,7 @@ static int load_art(void) {
     return loaded;
 }
 static void apply_enabled(void) {
+    if(mm1_net_locked())return;
     int on=requested||coop_required;
 #ifndef MM1_PROFILE_USA
     on=0;
@@ -65,7 +78,11 @@ static void apply_enabled(void) {
     mm1_controls_refresh();mm1_video_character_changed();
 }
 static void set_enabled(int on){requested=on!=0;apply_enabled();}
-void mm1_proto_coop_enable(int on){coop_required=on!=0;apply_enabled();}
+void mm1_proto_coop_enable(int on){if(mm1_net_locked())return;coop_required=on!=0;apply_enabled();}
+int mm1_proto_configure(int wanted,int mode,int start) {
+    if(mm1_net_locked()||wanted<0||wanted>1||mode<0||mode>1||start<0||start>1)return 0;
+    real_mode=mode;start_proto=start;set_enabled(wanted);return enabled==(requested||coop_required);
+}
 void mm1_proto_stage_enter(void){for(int i=0;i<2;i++)states[i].teleport=states[i].pending=states[i].previous=0;mm1_reflect_stage_enter();}
 static void sound(uint8_t track) {
     int n=R(0x45);if(n<16){W(0x580+n,track);W(0x45,n+1);}
@@ -216,8 +233,9 @@ static int put(const uint8_t *in,int len) {
     memset(states,0,sizeof states);if(len)memcpy(states,in,sizeof states);return 1;
 }
 static int pose_done(uint16_t address){(void)address;mm1_proto_pose_done();return 0;}
-static void reset(void){coop_required=0;set_enabled(0);real_mode=1;start_proto=1;}
+static void reset(void){if(mm1_net_locked())return;coop_required=0;set_enabled(0);real_mode=1;start_proto=1;}
 static void activate(void) {
+    if(mm1_net_locked())return;
     char value[32]="protoman";
     nes_mod_option_value("mega-man-usa.character.protoman","protoman","mode",value,sizeof value);
     real_mode=!strcmp(value,"protoman");
@@ -226,7 +244,7 @@ static void activate(void) {
     start_proto=!strcmp(value,"protoman");set_enabled(1);
 }
 static bool option(void *ctx,const char *name,const char *value) {
-    (void)ctx;
+    (void)ctx;if(mm1_net_locked())return false;
     if(!strcmp(name,"--proto-report")){report=fopen(value,"w");return report!=NULL;}
     if(strcmp(name,"--protoman"))return false;
     if(!strcmp(value,"off")){set_enabled(0);return true;}

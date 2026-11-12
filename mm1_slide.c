@@ -2,6 +2,7 @@
 #include "mm1_slide.h"
 #include "mm1_proto.h"
 #include "mm1_coop.h"
+#include "mm1_net.h"
 #include "cyc_mod.h"
 #include "cyc_ring.h"
 #include "cyc_mm4_donor.h"
@@ -157,6 +158,7 @@ static int contact(uint16_t address) {
 }
 static int stage_exit(uint16_t address){(void)address;mm1_slide_stage_enter();return 0;}
 static void set_enabled(int on) {
+    if(mm1_net_locked())return;
 #ifndef MM1_PROFILE_USA
     on=0;
 #endif
@@ -191,9 +193,10 @@ static int put(const uint8_t *in,int len) {
     if(!valid(in,len))return 0;memset(slides,0,sizeof slides);if(len)memcpy(slides,in,sizeof slides);return 1;
 }
 static void reset(void){set_enabled(0);}
-static void activate(void){if(mm1_mm4_load("slide")){loaded=load_art();set_enabled(1);}}
+static void activate(void){if(!mm1_net_locked()&&mm1_mm4_load("slide")){loaded=load_art();set_enabled(1);}}
 static bool option(void *ctx,const char *name,const char *value) {
-    (void)ctx;if(!strcmp(name,"--slide-report")){report=fopen(value,"w");return report!=NULL;}
+    (void)ctx;if(mm1_net_locked())return false;
+    if(!strcmp(name,"--slide-report")){report=fopen(value,"w");return report!=NULL;}
     if(strcmp(name,"--slide"))return false;
     if(strcmp(value,"on")&&strcmp(value,"off"))return false;
     if(!strcmp(value,"on")){if(!mm1_mm4_load("slide"))return false;loaded=load_art();}

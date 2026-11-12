@@ -135,7 +135,13 @@ match. Shared and independent gameplay policies stay fixed for that match.
 Targeted desktop/SERVER LAN checks use native and interpreter execution with
 delayed rollback, both native inventories, charged shots and sliding. Required
 donor ROMs are verified again during admission; missing or wrong images refuse
-the match. Full-stage coverage and final release qualification remain open.
+the match. Independent-view rollback and final release qualification remain open.
+
+High-level checks reach the main area, authored checkpoint area and boss in all
+ten stages. Real attacks complete each native clear, including both final Wily
+phases and the ending. Earlier traversal is bypassed; these are targeted checks.
+Wily's moving background preserves native player and projectile positions, with
+native-pixel, backend and current-build state/audio comparisons.
 
 ## Cycle backend migration branch
 

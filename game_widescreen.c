@@ -12,6 +12,7 @@ static void game_shared_hud_paint(uint32_t *out,int width,int origin);
 static void game_hud_begin(void);
 static void game_hud_done(void);
 static int game_shared_camera(int width,int *source);
+static int game_sprite_camera(void);
 static const char *hook_ids[]={"mm1.widescreen.draw","mm1.widescreen.emit","mm1.widescreen.build","mm1.widescreen.cull","mm1.widescreen.minor_cull","mm1.widescreen.spawn","mm1.widescreen.dma0"};
 static const uint16_t hook_addrs[]={MM_DRAW,MM_EMIT,MM_BUILD,0x9951,0xBE81,MM_SPAWN,MM_DMA0};
 #include "widescreen_common.h"
@@ -70,7 +71,7 @@ static void game_prepare_render(int width,int x0) {
     const uint8_t *oam=cyc_render_oam();
     for(int i=0;i<64;i++) {
         const uint8_t *o=oam+i*4;int kind=ws.display_oam_kind[i];
-        int moved=kind==2 || (kind==1 && ws.display_oam_x[i]-camera_x!=o[3]);
+        int moved=kind==2 || (kind==1 && ws.display_oam_x[i]-game_sprite_camera()!=o[3]);
         if(!moved || o[0]>=239)continue;
         wrapped_oam+=kind==1;hud_oam+=kind==2;
         int rows=cyc_render_line_sprite16(o[0]+1)?16:8;
@@ -91,7 +92,7 @@ static void game_draw_native(uint32_t *out,int width,int x0) {
         }
         const uint8_t *o=oam+i*4;if(o[0]>=239)continue;
         int kind=ws.display_oam_kind[i],x=o[3]+source-camera_x,force=source!=camera_x;
-        if(kind==1){x=ws.display_oam_x[i]-camera_x;force=x!=o[3];}
+        if(kind==1){x=ws.display_oam_x[i]-game_sprite_camera();force=x!=o[3];}
         if(kind==2){x=ws.display_oam_x[i]-x0;force=1;}
         draw_tile(out,width,x0,x0+x,o[0]+1,o[1],o[2],force||first>=0||mm1_video_dust_visible()||mm1_coop_picture());
     }
@@ -360,12 +361,17 @@ static void game_debug(char *out,size_t cap) {
 
 typedef struct {uint8_t x,y,attr,height,pattern[32],palette[4];} ViewHud;
 typedef struct {
-    uint8_t active,native_scene,odd,stage,ready,hud_count[2],native_script,hud_shared,shared_camera;
+    uint8_t active,native_scene,odd,stage,ready,hud_count[2],native_script,hud_shared,shared_camera,temporary_bg;
     int16_t camera,left[2];uint8_t tile[2][30][33],palette[2][30][33];ViewHud hud[2][32];
     int16_t focus,room_left,room_right;
     uint64_t hud_mask;uint8_t hud_oam[256];
 } ViewFrame;
 static ViewFrame view_build,view_shown;
+static int game_sprite_camera(void) {
+    /* Wily moves his large background through B2/B3. Native sprite placement
+       still subtracts $1A, so that visual scroll must not drag either player. */
+    return view_shown.stage==R(0x31)&&view_shown.temporary_bg?view_shown.camera:camera_x;
+}
 static int game_shared_camera(int width,int *source) {
     if(!mm1_coop_available()||mm1_coop_independent()||!view_shown.shared_camera||view_shown.stage!=R(0x31))return 0;
     *source=unwrap(cyc_render_line_scroll_x(80),view_shown.camera,WS_SCROLL_PERIOD);
@@ -415,6 +421,7 @@ static void view_hud(int seat) {
 }
 static void game_views_build(void) {
     memset(&view_build,0,sizeof view_build);view_build.ready=1;hud_cursor=-1;hud_draw=0;
+    view_build.stage=R(0x31);view_build.camera=(int16_t)game_camera();view_build.temporary_bg=(uint8_t)(R(0xB4)!=0);
     if(!mm1_coop_independent()) {
         if(mm1_coop_view_active()&&R(0x31)<10&&R(0x54)==32) {
             view_build.stage=R(0x31);view_build.hud_shared=1;
@@ -510,14 +517,14 @@ static int game_render_views(uint32_t *out,int width,int height,const uint32_t *
 }
 typedef struct {char magic[4];ViewFrame build,shown;CameraRebase rebase;int16_t hud_cursor;uint8_t hud_draw;} ViewsState;
 static int views_get(uint8_t *out,int cap) {
-    if(cap<(int)sizeof(ViewsState))return -1;ViewsState s={0};memcpy(s.magic,"MV05",4);s.build=view_build;s.shown=view_shown;s.rebase=camera_rebase;s.hud_cursor=hud_cursor;s.hud_draw=hud_draw;
+    if(cap<(int)sizeof(ViewsState))return -1;ViewsState s={0};memcpy(s.magic,"MV06",4);s.build=view_build;s.shown=view_shown;s.rebase=camera_rebase;s.hud_cursor=hud_cursor;s.hud_draw=hud_draw;
     memcpy(out,&s,sizeof s);return sizeof s;
 }
 static int views_valid(const uint8_t *in,int size) {
-    if(!size)return 1;ViewsState s;if(!in||size!=sizeof s)return 0;memcpy(&s,in,sizeof s);if(memcmp(s.magic,"MV05",4)||s.rebase.pending>1||s.hud_draw>1||s.hud_cursor< -1||s.hud_cursor>248||(s.hud_cursor>=0&&(s.hud_cursor&3))||
+    if(!size)return 1;ViewsState s;if(!in||size!=sizeof s)return 0;memcpy(&s,in,sizeof s);if(memcmp(s.magic,"MV06",4)||s.rebase.pending>1||s.hud_draw>1||s.hud_cursor< -1||s.hud_cursor>248||(s.hud_cursor>=0&&(s.hud_cursor&3))||
         (s.rebase.pending&&(s.rebase.stage>=10||s.rebase.camera>47*256)))return 0;
     const ViewFrame *v[]={&s.build,&s.shown};for(int k=0;k<2;k++) {
-        if(v[k]->active>1||v[k]->native_scene>1||v[k]->native_script>1||v[k]->hud_shared>1||v[k]->shared_camera>1||v[k]->odd>1||v[k]->ready>1||((v[k]->active||v[k]->hud_shared)&&v[k]->stage>=10))return 0;
+        if(v[k]->active>1||v[k]->native_scene>1||v[k]->native_script>1||v[k]->hud_shared>1||v[k]->shared_camera>1||v[k]->temporary_bg>1||v[k]->odd>1||v[k]->ready>1||((v[k]->active||v[k]->hud_shared)&&v[k]->stage>=10))return 0;
         if(v[k]->shared_camera&&(v[k]->focus<0||v[k]->focus>=48*256||v[k]->room_left<0||v[k]->room_right>48*256||v[k]->room_right<=v[k]->room_left))return 0;
         for(int seat=0;seat<2;seat++) {
             if(v[k]->hud_count[seat]>32||v[k]->left[seat]<0||v[k]->left[seat]>47*256)return 0;

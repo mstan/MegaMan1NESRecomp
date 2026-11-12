@@ -158,7 +158,7 @@ static int render_inner(uint32_t *out,int width,int height,int x0,const uint32_t
     /* Signed packets also repaint selected native pixels when byte-X sprites
      * have wrapped or the console's column guards interrupt the wide view. */
     if(menu)return 1;
-    if(full){mm1_sprites_draw(out,width,x0,camera_x,mm1_coop_hud_active()?-2:-1,-16,coverage);return 1;}
+    if(full){mm1_sprites_draw(out,width,x0,game_sprite_camera(),mm1_coop_hud_active()?-2:-1,-16,coverage);return 1;}
     mm1_video_paint_dust(out,width,native_origin,coverage);
     for(int i=ws.display.count-1;i>=0;i--) {
         WsSprite *s=&ws.display.tile[i];
@@ -169,7 +169,7 @@ static int render_inner(uint32_t *out,int width,int height,int x0,const uint32_t
             }
             continue;
         }
-        int sx=s->x-camera_x+x0,sy=s->y;
+        int sx=s->x-game_sprite_camera()+x0,sy=s->y;
         draw_tile(out,width,x0,sx,sy,s->tile,s->attr,0);
     }
     game_draw_native(out,width,x0);

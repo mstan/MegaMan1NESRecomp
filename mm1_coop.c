@@ -171,9 +171,20 @@ static void initialize(void) {
     C.withdrawn=C.revive_pending=0;memset(C.select_hold,0,sizeof C.select_hold);memset(C.select_armed,0,sizeof C.select_armed);
     memset(C.select_previous,0,sizeof C.select_previous);
 }
+enum {WEAPON_WORLD_BYTES=1+0xD0+38};
+static unsigned weapon_world_address(int i) {
+    /* Native Guts/Elec firing changes active types and appends 21-byte TSA
+       transfers. Coordinates, palette RAM and controller scratch stay scoped. */
+    if(!i)return 0x1C;
+    if(i<=0xD0)return 0x2FF+i;
+    return 0x721+(i-0xD1)*6;
+}
 static int private_call(uint16_t address,CycModRegs *regs,int limit,int hooks) {
     if(!cyc_mod_isolate_begin())return 0;
     if(limit)W(0x54,16);
+    /* The retail controller leaves actor zero as the collision reference for
+       A35C. The isolated controller's caller scratch is restored on return. */
+    int shooting=address==0xA35C,weapon_world=shooting||address==0x94A8;if(shooting)W(0x2F,0);
     C.in_guest=1;C.drawing=(uint8_t)(address==0xD131);
     if(C.drawing) {
         C.building_guest_owner=C.current;
@@ -184,7 +195,7 @@ static int private_call(uint16_t address,CycModRegs *regs,int limit,int hooks) {
     }
     if(hooks)cyc_mod_allow_isolated_hooks(true);
     int ok=cyc_mod_call(address,regs);
-    uint8_t result[MAX_PERSONAL],sound[16];int count=0;
+    uint8_t result[MAX_PERSONAL],sound[16],world[WEAPON_WORLD_BYTES];int count=0;
     if(ok) {
         if(C.drawing) {
             mm1_video_private_finish();for(int i=0;i<256;i++)C.building.oam[i]=R(0x200+i);
@@ -200,10 +211,12 @@ static int private_call(uint16_t address,CycModRegs *regs,int limit,int hooks) {
             }
         }
         for(int i=0;i<address_count;i++)result[i]=R(addresses[i]);count=R(0x45);for(int i=0;i<16;i++)sound[i]=R(0x580+i);
+        if(weapon_world)for(int i=0;i<WEAPON_WORLD_BYTES;i++)world[i]=R(weapon_world_address(i));
     }
     C.in_guest=C.drawing=0;cyc_mod_isolate_end();
     if(ok) {
         for(int i=0;i<address_count;i++)W(addresses[i],result[i]);
+        if(weapon_world)for(int i=0;i<WEAPON_WORLD_BYTES;i++)W(weapon_world_address(i),world[i]);
         int before=R(0x45);if(count>=before&&count<=16){for(int i=before;i<count;i++)W(0x580+i,sound[i]);W(0x45,count);}
     }
     return ok;
@@ -382,6 +395,7 @@ int mm1_coop_dispatch(void) {
     if(ok){capture(p);C.updates++;}else C.failures++;
     for(int i=0;i<2048;i++)after[i]=R(i);
     for(int i=0;i<2048;i++)if(R(i)!=original[i])W(i,original[i]);
+    if(ok)for(int i=0;i<WEAPON_WORLD_BYTES;i++){unsigned a=weapon_world_address(i);if(after[a]!=original[a])W(a,after[a]);}
     if(ok&&after[0x45]>=original[0x45]&&after[0x45]<=16) {
         for(int i=original[0x45];i<after[0x45];i++)W(0x580+i,after[0x580+i]);W(0x45,after[0x45]);
     }

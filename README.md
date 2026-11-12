@@ -54,6 +54,8 @@ player's native inventory in the shared view. Up/Down moves through acquired
 weapons, A equips without closing, and only that player can resume with Start.
 Health and ammo remain personal. Targeted checks compare the complete panel
 with the original menu and replay a paused current-build state, including audio.
+Guest Elec Beams and Guts pickup also change the shared stage's native blocks;
+targeted checks compare the resulting tiles and native weapon artwork.
 Full-stage transition coverage, independent views and online play are still being
 implemented; the Co-op package is not exposed in the Mods catalog yet.
 

@@ -32,7 +32,7 @@ Half shots use normal Buster damage; full shots triple it and continue through
 lethal enemy hits.
 The donor image and its artwork are never written into the package. Charging,
 active-shot state/audio replay, slide movement/ceilings/contact and native
-damage paths have targeted checks. Final online qualification remains open.
+damage paths have targeted checks, including the desktop/SERVER online profiles.
 
 The development `--coop on` slice separates personal movement, equipment state
 and native actors while the original frame loop advances the world once.
@@ -138,7 +138,9 @@ match. Shared and independent gameplay policies stay fixed for that match.
 Targeted desktop/SERVER LAN checks use native and interpreter execution with
 delayed rollback, both native inventories, charged shots and sliding. Required
 donor ROMs are verified again during admission; missing or wrong images refuse
-the match. Independent-view rollback and final release qualification remain open.
+the match. Shared and independent view policies have matching canonical-tick
+state digests through delayed rollback. Final packaging and owner play review
+remain open.
 
 High-level checks reach the main area, authored checkpoint area and boss in all
 ten stages. Real attacks complete each native clear, including both final Wily

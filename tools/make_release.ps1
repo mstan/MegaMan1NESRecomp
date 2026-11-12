@@ -21,9 +21,14 @@ to withdraw while your partner remains, then release and press it to rejoin
 beside a safely grounded partner. Health, weapons and ammo remain personal.
 Shared, split and single-player views are available in Mods.
 
+For online play, enable Co-op before creating a room. Shared and independent
+gameplay policies stay fixed for that match. Within an independent match,
+each player can choose split screen or either player's view locally.
+
 Charge shots and sliding are optional Mods shared by both characters. They
 require your original Mega Man 4 (USA) ROM. Hold B with the Buster to charge;
 press Down + A to slide. No donor ROM or extracted donor data is included.
+Each online player selects their own donor image when these abilities are on.
 
 Save states belong to this build. Preserve your existing saves and settings
 when replacing an older installation.

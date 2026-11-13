@@ -10,6 +10,8 @@ if (-not $Rom) {
 $notes=@'
 Fit to screen, L/R weapon switching, Reduce slowdown and No sprite flicker
 start enabled for a fresh profile. Existing saved choices take precedence.
+Keyboard defaults are arrows to move, Z jump, X fire, Q/E weapons, Enter Start
+and Backslash Select. Controls can be remapped in the system menu.
 
 Enable Proto Man in Mods to swap characters with Select. Its normal setting
 includes the airborne front shield, two Buster shots and double damage taken.

@@ -19,6 +19,8 @@ opt-in default.
 The optional USA Proto Man package adds Select teleport swapping, an airborne
 front shield with reflected native projectiles, two uncharged shots and double
 incoming damage. Its normal-stat reskin option retains Mega Man's behavior.
+Solo Select swaps keep separate health for Mega Man and Proto Man. Native
+health pickups heal the active character; a native death/retry restores both.
 Current checks cover native/interpreter agreement, Fit sprite placement,
 current-build state replay and native enemy/boss collision paths.
 The native inventory keeps its panel geometry and life count with the selected

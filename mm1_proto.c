@@ -29,6 +29,7 @@ static FILE *report;
 typedef struct {
     char magic[4];
     uint8_t on,mode,selected,teleport,previous,pending,invulnerability,dispatched;
+    uint8_t health[2],health_ready,health_owner;
     uint64_t swaps,damage_hits,shot_limit;
 } ProtoState;
 static ProtoState states[2];
@@ -37,6 +38,7 @@ static ProtoState states[2];
 void mm1_video_character_changed(void);
 void mm1_controls_refresh(void);
 int mm1_controls_safe(void);
+int mm1_controls_gameplay(void);
 
 int mm1_proto_available(void){return enabled;}
 void mm1_proto_settings(int *wanted,int *mode,int *start){*wanted=requested;*mode=real_mode;*start=start_proto;}
@@ -53,6 +55,25 @@ int mm1_proto_real_traits(void){return mm1_proto_selected()&&real_mode;}
 const CycProtoAtlas *mm1_proto_atlas(void){return loaded?&atlas:NULL;}
 static int playable(void) {
     return mm1_controls_safe();
+}
+/* The native HP register belongs to the visible solo character. Co-op keeps
+ * its existing per-player ownership and never uses these reserve banks. */
+static void health_record(void) {
+    if(cyc_mod_isolated() || mm1_coop_available() || !state.health_ready || R(0x31)>=10)return;
+    int hp=R(0x6A);if(hp<=28)state.health[state.health_owner]=(uint8_t)hp;
+}
+static void health_sync(void) {
+    if(cyc_mod_isolated())return;
+    if(mm1_coop_available()){for(int i=0;i<2;i++){states[i].health_ready=0;states[i].health_owner=(uint8_t)mm1_coop_character_for(i);}return;}
+    if((!enabled&&!state.health_ready)||!mm1_controls_gameplay())return;
+    int owner=enabled?state.selected:0;
+    if(!state.health_ready) {
+        state.health[0]=state.health[1]=28;state.health_ready=1;
+    }
+    health_record();
+    if(state.health_owner!=owner) {
+        state.health_owner=(uint8_t)owner;W(0x6A,state.health[owner]);
+    }
 }
 static int load_art(void) {
     if(loaded)return 1;
@@ -83,12 +104,19 @@ int mm1_proto_configure(int wanted,int mode,int start) {
     if(mm1_net_locked()||wanted<0||wanted>1||mode<0||mode>1||start<0||start>1)return 0;
     real_mode=mode;start_proto=start;set_enabled(wanted);return enabled==(requested||coop_required);
 }
-void mm1_proto_stage_enter(void){for(int i=0;i<2;i++)states[i].teleport=states[i].pending=states[i].previous=0;mm1_reflect_stage_enter();}
+void mm1_proto_stage_enter(void) {
+    for(int i=0;i<2;i++) {
+        states[i].teleport=states[i].pending=states[i].previous=states[i].health_ready=0;
+        states[i].health_owner=(uint8_t)(enabled?states[i].selected:0);
+    }
+    mm1_reflect_stage_enter();
+}
 static void sound(uint8_t track) {
     int n=R(0x45);if(n<16){W(0x580+n,track);W(0x45,n+1);}
 }
 int mm1_proto_dispatch(void) {
     if(!enabled||mm1_coop_available())return 0;
+    health_sync();
     unsigned fresh=state.pending;state.pending=0;
     if(fresh && !state.teleport && playable() && mm1_slide_cancel_for_switch()) {
         state.teleport=1;state.invulnerability=R(0x55);state.swaps++;
@@ -145,27 +173,29 @@ static void input(void *ctx,uint8_t buttons[2]) {
     buttons[0]&=(uint8_t)~0x20; /* Preserve MM1 Select pause when this package is off. */
     if(state.teleport)buttons[0]=0;
 }
-static void begin(void *ctx){(void)ctx;state.dispatched=0;}
+static void begin(void *ctx){(void)ctx;state.dispatched=0;health_sync();}
 static void end(void *ctx) {
     (void)ctx;if(!playable())state.pending=0;
     mm1_reflect_frame_end();
     if(enabled&&state.teleport&&state.dispatched) {
-        if(state.teleport==16){state.selected^=1;sound(0x20);mm1_video_character_changed();}
+        if(state.teleport==16){state.selected^=1;health_sync();sound(0x20);mm1_video_character_changed();}
         if(++state.teleport>32) {
             state.teleport=0;W(0x55,state.invulnerability);mm1_video_character_changed();
         }
     }
+    health_record();
     if(report) {
         char fields[256],reflection[256];mm1_proto_video_debug(fields,sizeof fields);
         mm1_reflect_debug(reflection,sizeof reflection);
         unsigned shots=0;for(int i=2;i<5;i++)if(R(0x600+i)<248&&R(0x400+i)==0x1A)shots|=1u<<(i-2);
-        fprintf(report,"{\"frame\":%llu,\"selected\":%u,\"teleport\":%u,\"swaps\":%llu,\"damage_hits\":%llu,\"limited\":%llu,\"hp\":%u,\"native_pause\":%u,\"shots\":%u,%s,%s}\n",
+        fprintf(report,"{\"frame\":%llu,\"selected\":%u,\"teleport\":%u,\"swaps\":%llu,\"damage_hits\":%llu,\"limited\":%llu,\"hp\":%u,\"health\":[%u,%u],\"health_owner\":%u,\"native_pause\":%u,\"shots\":%u,%s,%s}\n",
             (unsigned long long)cyc_ring_frame,state.selected,state.teleport,(unsigned long long)state.swaps,
-            (unsigned long long)state.damage_hits,(unsigned long long)state.shot_limit,R(0x6A),R(0x41),shots,fields,reflection);
+            (unsigned long long)state.damage_hits,(unsigned long long)state.shot_limit,R(0x6A),state.health[0],state.health[1],state.health_owner,R(0x41),shots,fields,reflection);
     }
 }
 static void power_on(void *ctx) {
     (void)ctx;memset(states,0,sizeof states);states[0].selected=(uint8_t)start_proto;states[1].selected=(uint8_t)!start_proto;
+    for(int i=0;i<2;i++)states[i].health_owner=(uint8_t)(enabled?states[i].selected:0);
     mm1_proto_video_reset();
     mm1_reflect_reset();
 }
@@ -217,15 +247,17 @@ uint32_t mm1_proto_color(unsigned index) {
 }
 static int get(uint8_t *out,int cap) {
     if(cap<(int)sizeof states)return -1;
-    for(int i=0;i<2;i++){memcpy(states[i].magic,"MP02",4);states[i].on=(uint8_t)enabled;states[i].mode=(uint8_t)real_mode;}
+    health_record();
+    for(int i=0;i<2;i++){memcpy(states[i].magic,"MP03",4);states[i].on=(uint8_t)enabled;states[i].mode=(uint8_t)real_mode;}
     memcpy(out,states,sizeof states);return sizeof states;
 }
 static int valid(const uint8_t *in,int len) {
     if(!len)return !enabled;
     if(!in || len!=sizeof states)return 0;
     ProtoState next[2];memcpy(next,in,sizeof next);
-    for(int i=0;i<2;i++)if(memcmp(next[i].magic,"MP02",4)||next[i].on!=enabled||next[i].mode!=real_mode||
-        next[i].selected>1||next[i].teleport>32||next[i].previous>1||next[i].pending>1||next[i].dispatched>1)return 0;
+    for(int i=0;i<2;i++)if(memcmp(next[i].magic,"MP03",4)||next[i].on!=enabled||next[i].mode!=real_mode||
+        next[i].selected>1||next[i].teleport>32||next[i].previous>1||next[i].pending>1||next[i].dispatched>1||
+        next[i].health_ready>1||next[i].health_owner>1||next[i].health[0]>28||next[i].health[1]>28)return 0;
     return 1;
 }
 static int put(const uint8_t *in,int len) {

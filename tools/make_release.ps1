@@ -16,6 +16,8 @@ and Backslash Select. Controls can be remapped in the system menu.
 Enable Proto Man in Mods to swap characters with Select. Its normal setting
 includes the airborne front shield, two Buster shots and double damage taken.
 The optional normal-stat reskin keeps Mega Man's behavior.
+Solo swaps retain separate health for each character. Health pickups heal
+the active character, and a native death/retry restores both health pools.
 
 Enable Co-op in Mods and assign each player's controls in Controls. Start
 opens your native inventory; only the pausing player can resume. Hold Select

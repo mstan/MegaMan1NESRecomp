@@ -52,7 +52,9 @@ static int capture_overlay(int actor,int seat,int camera) {
     for(int y=0;y<240;y++)for(int x=0;x<256;x++)if(picture[y*256+x]>>24) {
         if(x<left)left=x;if(x>right)right=x;if(y<top)top=y;if(y>bottom)bottom=y;
     }
-    if(right<left)return 0;
+    /* An owned beam/body can be wholly outside the picture. Suppress its
+     * native fallback even when the replacement has no visible pixels. */
+    if(right<left)return 1;
     if(right-left>=64||bottom-top>=64||B.overlays==OVERLAY_CAP){failed=1;return 0;}
     Overlay *o=&B.overlay[B.overlays++];o->x=(int16_t)(camera+left);o->y=(int16_t)top;
     o->width=(uint8_t)(right-left+1);o->height=(uint8_t)(bottom-top+1);o->actor=(uint8_t)actor;o->seat=(uint8_t)seat;o->behind=R(0x13)&32;

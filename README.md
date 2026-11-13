@@ -3,6 +3,8 @@
 The USA ROM supports adaptive Fit to screen and L/R weapon switching through
 the preloaded Mods catalog. Fit is enabled for a fresh profile. L/R follows the
 native inventory order, including empty weapons, and ignores unsafe transitions.
+Solo wide views and actor activation stay within the authored room edges.
+Character swaps suppress the native body while its replacement is offscreen.
 Existing saved choices take precedence over the package defaults.
 Quick switching restores the original weapon's pattern graphics. Co-op players
 retain their own weapon patterns while the main player's graphics are displayed.
@@ -152,7 +154,8 @@ current-build state/audio comparisons.
 ## Cycle backend migration branch
 
 Default cycle controls: arrows move, Z is A, X is B, Enter is Start and
-Backslash is Select. Escape or both controller sticks opens the system menu;
+Backslash is Select. Q/E selects the previous/next acquired weapon. Escape or
+both controller sticks opens the system menu;
 Tab fast-forwards. Use Controls to remap inputs in `config.ini`.
 Older `keybinds.ini` and F5/F6/F7 instructions below apply to the legacy host.
 

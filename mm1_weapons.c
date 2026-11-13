@@ -174,7 +174,7 @@ static int stage_enter(uint16_t address){
 }
 const CycHostExtras *mm1_weapons_extras(void) {
     static const CycInputProfile profile={.id="megaman-weapons-1",
-        .game_label={"Previous weapon (L)","Next weapon (R)"},.game_pad={"leftshoulder","rightshoulder"},
+        .game_label={"Previous weapon (L)","Next weapon (R)"},.game_key={"Q","E"},.game_pad={"leftshoulder","rightshoulder"},
         .shortcut_pad={"none","leftstick+rightstick",NULL,NULL,NULL,NULL,NULL}};
     static const CycHostOption options[]={{"--weapon-cycle",true,"on|off: L/R cycles acquired weapons"},
         {"--weapon-report",true,"FILE: per-frame weapon QA observations"}};

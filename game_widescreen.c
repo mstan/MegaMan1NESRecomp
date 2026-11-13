@@ -30,10 +30,15 @@ static int in_player_views(int x,int pad) {
     int left[2];if(!mm1_coop_view_rects(left))return 0;
     return (x+pad>=left[0]&&x-pad<left[0]+256)||(x+pad>=left[1]&&x-pad<left[1]+256);
 }
+static int room_view_left(int wanted,int width,int left,int right) {
+    if(right-left<width)return left+(right-left-width)/2;
+    if(wanted<left)wanted=left;if(wanted>right-width)wanted=right-width;return wanted;
+}
 static void shared_window(int *left,int *right) {
     int width=extended?mm1_net_simulation_width(cyc_video_width()):256;
     if(!enabled)width=256;
     int native=game_camera(),fallback=native-(width-256)/2;
+    if(!mm1_coop_available())fallback=room_view_left(fallback,width,R(0x27)*256,(R(0x28)+1)*256);
     *left=mm1_coop_shared_left(fallback,width,R(0x27)*256,(R(0x28)+1)*256);*right=*left+width;
 }
 static int game_valid(void) {
@@ -232,7 +237,7 @@ static void capture_actor(void) {
 static void load_visible(void) {
     if(!cache_rom() || R(0x3E))return;
     int cam=game_camera(),margin=(mm1_net_simulation_width(cyc_video_width())-256)/2;
-    int left=cam-margin,right=cam+256+margin;if(mm1_coop_available())shared_window(&left,&right);left-=16;right+=16;
+    int left=cam-margin,right=cam+256+margin;shared_window(&left,&right);left-=16;right+=16;
     int stage=R(0x31),ptr=graphics[0x2452+stage*2]|(graphics[0x2453+stage*2]<<8);
     if(ptr<0x8000 || ptr>=0xC000)return;
     uint32_t scene=(uint32_t)((stage<<12)|(R(0x27)<<6)|R(0x28));
@@ -344,7 +349,7 @@ static int hook(uint16_t addr) {
     if(addr==0x9951 || addr==0xBE81) {
         CycModRegs regs;cyc_mod_regs(&regs);
         int cam=game_camera(),margin=(mm1_net_simulation_width(cyc_video_width())-256)/2,x=actor_x(regs.x),left=cam-margin,right=cam+256+margin;
-        if(mm1_coop_available())shared_window(&left,&right);
+        shared_window(&left,&right);
         if(regs.x<32 && (mm1_coop_independent()?in_player_views(x,16):(x>=left-16&&x<right+16))) {
             /* This is the BEQ after the high-byte screen subtraction, not a
              * subroutine. Change its condition and let the original branch run. */
@@ -373,11 +378,10 @@ static int game_sprite_camera(void) {
     return view_shown.stage==R(0x31)&&view_shown.temporary_bg?view_shown.camera:camera_x;
 }
 static int game_shared_camera(int width,int *source) {
-    if(!mm1_coop_available()||mm1_coop_independent()||!view_shown.shared_camera||view_shown.stage!=R(0x31))return 0;
+    if(mm1_coop_independent()||!view_shown.shared_camera||view_shown.stage!=R(0x31))return 0;
     *source=unwrap(cyc_render_line_scroll_x(80),view_shown.camera,WS_SCROLL_PERIOD);
     int left=view_shown.room_left,right=view_shown.room_right;
-    if(right-left<width)return left+(right-left-width)/2;
-    int view=view_shown.focus-width/2;if(view<left)view=left;if(view>right-width)view=right-width;return view;
+    return room_view_left(view_shown.focus-width/2,width,left,right);
 }
 static int16_t hud_cursor=-1;
 static uint8_t hud_draw;
@@ -423,6 +427,12 @@ static void game_views_build(void) {
     memset(&view_build,0,sizeof view_build);view_build.ready=1;hud_cursor=-1;hud_draw=0;
     view_build.stage=R(0x31);view_build.camera=(int16_t)game_camera();view_build.temporary_bg=(uint8_t)(R(0xB4)!=0);
     if(!mm1_coop_independent()) {
+        /* Keep a solo wide picture inside the authored room, using the native
+         * camera's focus. Actor activation uses the same clamped interval. */
+        if(!mm1_coop_available()&&enabled&&game_valid()&&R(0x54)==32) {
+            view_build.shared_camera=1;view_build.focus=(int16_t)(game_camera()+128);
+            view_build.room_left=R(0x27)*256;view_build.room_right=(R(0x28)+1)*256;
+        }
         if(mm1_coop_view_active()&&R(0x31)<10&&R(0x54)==32) {
             view_build.stage=R(0x31);view_build.hud_shared=1;
             int focus;if(!mm1_coop_view_locked()&&mm1_coop_shared_focus(&focus)) {

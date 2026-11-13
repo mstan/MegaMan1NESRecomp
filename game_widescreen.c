@@ -41,13 +41,16 @@ static void shared_window(int *left,int *right) {
     if(!mm1_coop_available())fallback=room_view_left(fallback,width,R(0x27)*256,(R(0x28)+1)*256);
     *left=mm1_coop_shared_left(fallback,width,R(0x27)*256,(R(0x28)+1)*256);*right=*left+width;
 }
-static int game_valid(void) {
-    return R(0x31)<10 && mm1_coop_total()==32 && (mm1_coop_read(mm1_coop_anchor(),0x600)<248||mm1_coop_view_active()) && R(0x28)>=R(0x27) &&
+static int game_room_valid(void) {
+    return R(0x31)<10 && mm1_coop_total()==32 && R(0x28)>=R(0x27) &&
            R(0x28)<48 && R(0x1B)>=R(0x27) && R(0x1B)<=R(0x28) &&
            !R(0x1E) && !(R(0x26)&1);
 }
+static int game_valid(void) {
+    return game_room_valid() && (mm1_coop_read(mm1_coop_anchor(),0x600)<248||mm1_coop_view_active());
+}
 static int game_world_y(int y) {return y;}
-static int game_present_valid(void) {return game_valid() && (R(0x42)==5||mm1_coop_inflight());}
+static int game_present_valid(void) {return game_room_valid() && (R(0x42)==5||mm1_coop_inflight());}
 static uint8_t game_chr(uint16_t addr) {return cyc_render_chr(addr);}
 static void game_frame_end(void) {
     if(!game_valid()){ws.activation_scene=UINT32_MAX;return;}
@@ -378,6 +381,13 @@ static int game_sprite_camera(void) {
     return view_shown.stage==R(0x31)&&view_shown.temporary_bg?view_shown.camera:camera_x;
 }
 static int game_shared_camera(int width,int *source) {
+    if(!mm1_coop_available()) {
+        if(!enabled || !game_present_valid())return 0;
+        /* Solo geometry follows the captured native camera, independently of
+         * whether the native OAM builder published a visible player packet. */
+        *source=unwrap(cyc_render_line_scroll_x(80),game_camera(),WS_SCROLL_PERIOD);
+        return room_view_left(*source-(width-256)/2,width,R(0x27)*256,(R(0x28)+1)*256);
+    }
     if(mm1_coop_independent()||!view_shown.shared_camera||view_shown.stage!=R(0x31))return 0;
     *source=unwrap(cyc_render_line_scroll_x(80),view_shown.camera,WS_SCROLL_PERIOD);
     int left=view_shown.room_left,right=view_shown.room_right;
@@ -427,12 +437,7 @@ static void game_views_build(void) {
     memset(&view_build,0,sizeof view_build);view_build.ready=1;hud_cursor=-1;hud_draw=0;
     view_build.stage=R(0x31);view_build.camera=(int16_t)game_camera();view_build.temporary_bg=(uint8_t)(R(0xB4)!=0);
     if(!mm1_coop_independent()) {
-        /* Keep a solo wide picture inside the authored room, using the native
-         * camera's focus. Actor activation uses the same clamped interval. */
-        if(!mm1_coop_available()&&enabled&&game_valid()&&R(0x54)==32) {
-            view_build.shared_camera=1;view_build.focus=(int16_t)(game_camera()+128);
-            view_build.room_left=R(0x27)*256;view_build.room_right=(R(0x28)+1)*256;
-        }
+
         if(mm1_coop_view_active()&&R(0x31)<10&&R(0x54)==32) {
             view_build.stage=R(0x31);view_build.hud_shared=1;
             int focus;if(!mm1_coop_view_locked()&&mm1_coop_shared_focus(&focus)) {
